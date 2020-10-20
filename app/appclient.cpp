@@ -39,8 +39,8 @@ int main(int argc, char* argv[])
 
    hints.ai_flags = AI_PASSIVE;
    hints.ai_family = AF_INET;
-   hints.ai_socktype = SOCK_STREAM;
-   //hints.ai_socktype = SOCK_DGRAM;
+   //hints.ai_socktype = SOCK_STREAM;
+   hints.ai_socktype = SOCK_DGRAM;
 
    if (0 != getaddrinfo(NULL, "9000", &hints, &local))
    {
@@ -57,11 +57,6 @@ int main(int argc, char* argv[])
    //UDT::setsockopt(client, 0, UDP_SNDBUF, new int(10000000), sizeof(int));
    //UDT::setsockopt(client, 0, UDT_MAXBW, new int64_t(12500000), sizeof(int));
 
-   // Windows UDP issue
-   // For better performance, modify HKLM\System\CurrentControlSet\Services\Afd\Parameters\FastSendDatagramThreshold
-   #ifdef WIN32
-      UDT::setsockopt(client, 0, UDT_MSS, new int(1052), sizeof(int));
-   #endif
 
    // for rendezvous connection, enable the code below
    /*
@@ -112,12 +107,18 @@ int main(int argc, char* argv[])
       int ss;
       while (ssize < size)
       {
+          /*
          if (UDT::ERROR == (ss = UDT::send(client, data + ssize, size - ssize, 0)))
          {
             cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
             break;
          }
-         fprintf( stderr, "send %d bytes, cycle: %d\n", ss, i);
+         */
+         if (UDT::ERROR == (ss = UDT::sendmsg(client, data + ssize, size - ssize, (1<<20), 1)))
+         {
+            cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
+            break;
+         }
 
          ssize += ss;
       }
@@ -157,12 +158,14 @@ DWORD WINAPI monitor(LPVOID s)
          break;
       }
 
-      cout << perf.mbpsSendRate << "\t\t" 
-           << perf.msRTT << "\t" 
-           << perf.pktCongestionWindow << "\t" 
-           << perf.usPktSndPeriod << "\t\t\t" 
-           << perf.pktRecvACK << "\t" 
-           << perf.pktRecvNAK << endl;
+      fprintf(stdout, "%8.5f\t\t%6.2f\t\t%d\t\t%f\t%d\t%d\n",
+              perf.mbpsSendRate,
+              perf.msRTT,
+              perf.pktCongestionWindow,
+              perf.usPktSndPeriod,
+              perf.pktRecvACK,
+              perf.pktRecvNAK);
+
    }
 
    #ifndef WIN32

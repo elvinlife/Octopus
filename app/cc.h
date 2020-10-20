@@ -1,9 +1,13 @@
 #include <udt.h>
 #include <ccc.h>
+#include <cstdio>
 
 class CTCP: public CCC
 {
 public:
+
+    using CCC::CCC;
+
    void init()
    {
       m_bSlowStart = true;
@@ -16,8 +20,9 @@ public:
       setRTO(1000000);
    }
 
-   virtual void onACK(const int& ack)
+   virtual void onACK(int ack) override
    {
+       //fprintf( stderr, "recv_ack: seq: %d\n", ack );
       if (ack == m_iLastACK)
       {
          if (3 == ++ m_iDupACKCount)

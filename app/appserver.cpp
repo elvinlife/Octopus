@@ -39,8 +39,8 @@ int main(int argc, char* argv[])
 
    hints.ai_flags = AI_PASSIVE;
    hints.ai_family = AF_INET;
-   hints.ai_socktype = SOCK_STREAM;
-   //hints.ai_socktype = SOCK_DGRAM;
+   //hints.ai_socktype = SOCK_STREAM;
+   hints.ai_socktype = SOCK_DGRAM;
 
    string service("9000");
    if (2 == argc)
@@ -55,6 +55,7 @@ int main(int argc, char* argv[])
    UDTSOCKET serv = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
    // UDT Options
+   //UDT::setsockopt(serv, 0, UDT_CC, new CCCFactory<CTCP>, sizeof(CCCFactory<CTCP>));
    //UDT::setsockopt(serv, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
    //UDT::setsockopt(serv, 0, UDT_MSS, new int(9000), sizeof(int));
    //UDT::setsockopt(serv, 0, UDT_RCVBUF, new int(10000000), sizeof(int));
@@ -94,13 +95,9 @@ int main(int argc, char* argv[])
       getnameinfo((sockaddr *)&clientaddr, addrlen, clienthost, sizeof(clienthost), clientservice, sizeof(clientservice), NI_NUMERICHOST|NI_NUMERICSERV);
       cout << "new connection: " << clienthost << ":" << clientservice << endl;
 
-      #ifndef WIN32
-         pthread_t rcvthread;
-         pthread_create(&rcvthread, NULL, recvdata, new UDTSOCKET(recver));
-         pthread_detach(rcvthread);
-      #else
-         CreateThread(NULL, 0, recvdata, new UDTSOCKET(recver), 0, NULL);
-      #endif
+      pthread_t rcvthread;
+      pthread_create(&rcvthread, NULL, recvdata, new UDTSOCKET(recver));
+      pthread_detach(rcvthread);
    }
 
    UDT::close(serv);
@@ -130,7 +127,14 @@ DWORD WINAPI recvdata(LPVOID usocket)
          int rcv_size;
          int var_size = sizeof(int);
          UDT::getsockopt(recver, 0, UDT_RCVDATA, &rcv_size, &var_size);
+         /*
          if (UDT::ERROR == (rs = UDT::recv(recver, data + rsize, size - rsize, 0)))
+         {
+            cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
+            break;
+         }
+         */
+         if (UDT::ERROR == (rs = UDT::recvmsg(recver, data + rsize, size - rsize)))
          {
             cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
             break;

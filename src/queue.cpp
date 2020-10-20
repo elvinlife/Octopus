@@ -535,6 +535,8 @@ void CSndQueue::init(CChannel* c, CTimer* t)
          CPacket pkt;
          if (self->m_pSndUList->pop(addr, pkt) < 0)
             continue;
+         //fprintf(stderr, "send_pkt: seq_id %d msg_id %d ts %d\n",
+         //        pkt.m_iSeqNo, pkt.getMsgSeq(), pkt.m_iTimeStamp );
 
          self->m_pChannel->sendto(addr, pkt);
       }

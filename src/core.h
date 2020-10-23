@@ -342,7 +342,7 @@ private: // Sending related data
    volatile int32_t m_iSndLastDataAck;          // The real last ACK that updates the sender buffer and loss list
    volatile int32_t m_iSndCurrSeqNo;            // The largest sequence number that has been sent
    int32_t m_iLastDecSeq;                       // Sequence number sent last decrease occurs
-   int32_t m_iSndLastAck2;                      // Last ACK2 sent back
+   //int32_t m_iSndLastAck2;                      // Last ACK2 sent back
    uint64_t m_ullSndLastAck2Time;               // The time when last ACK2 was sent back
 
    int32_t m_iISN;                              // Initial Sequence Number
@@ -352,14 +352,19 @@ private: // Sending related data
 private: // Receiving related data
    CRcvBuffer* m_pRcvBuffer;                    // Receiver buffer
    CRcvLossList* m_pRcvLossList;                // Receiver loss list
-   CACKWindow* m_pACKWindow;                    // ACK history window
+   //CACKWindow* m_pACKWindow;                    // ACK history window
    CPktTimeWindow* m_pRcvTimeWindow;            // Packet arrival time window
+
+   int32_t* m_pRcvSeen;
+   int32_t m_iRcvWndMask;
+   int32_t m_iRcvWndSize;
 
    int32_t m_iRcvLastAck;                       // Last sent ACK
    uint64_t m_ullLastAckTime;                   // Timestamp of last ACK
-   int32_t m_iRcvLastAckAck;                    // Last sent ACK that has been acknowledged
-   int32_t m_iAckSeqNo;                         // Last ACK sequence number
-   int32_t m_iRcvCurrSeqNo;                     // Largest received sequence number
+   //int32_t m_iRcvLastAckAck;                    // Last sent ACK that has been acknowledged
+   //int32_t m_iAckSeqNo;                         // Last ACK sequence number
+   int32_t m_iRcvCurrSeqNo;                     // Largest cumulative received sequence number
+   int32_t m_iRcvHighSeqNo;
 
    uint64_t m_ullLastWarningTime;               // Last time that a warning message is sent
 
@@ -389,6 +394,8 @@ private: // Generation and processing of packets
    int packData(CPacket& packet, uint64_t& ts);
    int processData(CUnit* unit);
    int listen(sockaddr* addr, CPacket& packet);
+
+   void updateRcvWnd(CPacket& pkt);
 
 private: // Trace
    uint64_t m_StartTime;                        // timestamp when the UDT entity is started

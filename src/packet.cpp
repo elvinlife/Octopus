@@ -202,6 +202,7 @@ void CPacket::pack(int pkttype, void* lparam, void* rparam, int size)
 
       break;
 
+      /*
    case 6: //0110 - Acknowledgement of Acknowledgement (ACK-2)
       // ACK packet seq. no.
       m_nHeader[1] = *(int32_t *)lparam;
@@ -212,6 +213,7 @@ void CPacket::pack(int pkttype, void* lparam, void* rparam, int size)
       m_PacketVector[1].iov_len = 4; //0;
 
       break;
+      */
 
    case 3: //0011 - Loss Report (NAK)
       // loss list

@@ -84,7 +84,7 @@ CUDT::CUDT()
    m_pSndBuffer = NULL;
    m_pRcvBuffer = NULL;
    m_pSndLossList = NULL;
-   m_pRcvLossList = NULL;
+   //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
    m_pSndTimeWindow = NULL;
    m_pRcvTimeWindow = NULL;
@@ -138,7 +138,7 @@ CUDT::CUDT(const CUDT& ancestor)
    m_pSndBuffer = NULL;
    m_pRcvBuffer = NULL;
    m_pSndLossList = NULL;
-   m_pRcvLossList = NULL;
+   //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
    m_pSndTimeWindow = NULL;
    m_pRcvTimeWindow = NULL;
@@ -195,7 +195,7 @@ CUDT::~CUDT()
    delete m_pSndBuffer;
    delete m_pRcvBuffer;
    delete m_pSndLossList;
-   delete m_pRcvLossList;
+   //delete m_pRcvLossList;
    //delete m_pACKWindow;
    delete m_pSndTimeWindow;
    delete m_pRcvTimeWindow;
@@ -772,7 +772,7 @@ POST_CONNECT:
       m_pRcvBuffer = new CRcvBuffer(&(m_pRcvQueue->m_UnitQueue), m_iRcvBufSize);
       // after introducing lite ACK, the sndlosslist may not be cleared in time, so it requires twice space.
       m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
-      m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
+      //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
       m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
       m_pSndTimeWindow = new CPktTimeWindow();
@@ -875,7 +875,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
       m_pSndBuffer = new CSndBuffer(32, m_iPayloadSize);
       m_pRcvBuffer = new CRcvBuffer(&(m_pRcvQueue->m_UnitQueue), m_iRcvBufSize);
       m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
-      m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
+      //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
       m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
       m_pSndTimeWindow = new CPktTimeWindow();
@@ -1923,6 +1923,18 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
       */
 
    case 3: //011 - Loss Report
+   {
+       int32_t ack = CSeqNo::incseq(m_iRcvCurrSeqNo);
+
+       ctrlpkt.pack(pkttype, &ack, rparam, size);
+       ctrlpkt.m_iID = m_PeerID;
+       m_pSndQueue->sendto(m_pPeerAddr, ctrlpkt);
+
+       fprintf(stderr, "send_sack, ack: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
+               m_iRcvLastAck, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
+       break;
+   }
+       /*
       {
       if (NULL != rparam)
       {
@@ -1975,6 +1987,7 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
 
       break;
       }
+      */
 
    case 4: //100 - Congestion Warning
       ctrlpkt.pack(pkttype);
@@ -2027,6 +2040,9 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
       break;
    }
 }
+
+#define SACK_LEFT( i ) (i * 2 + 1)
+#define SACK_RIGHT( i ) (i * 2 + 2)
 
 void CUDT::processCtrl(CPacket& ctrlpkt)
 {
@@ -2228,35 +2244,20 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
       }
    */
 
-       /*
-   case 6: //110 - Acknowledgement of Acknowledgement
-      {
-      int32_t ack;
-      int rtt = -1;
-
-      // update RTT
-      rtt = m_pACKWindow->acknowledge(ctrlpkt.getAckSeqNo(), ack);
-      if (rtt <= 0)
-         break;
-
-      //if increasing delay detected...
-      //   sendCtrl(4);
-
-      // RTT EWMA
-      m_iRTTVar = (m_iRTTVar * 3 + abs(rtt - m_iRTT)) >> 2;
-      m_iRTT = (m_iRTT * 7 + rtt) >> 3;
-
-      m_pCC->setRTT(m_iRTT);
-
-      // update last ACK that has been received by the sender
-      if (CSeqNo::seqcmp(ack, m_iRcvLastAckAck) > 0)
-         m_iRcvLastAckAck = ack;
-
-      break;
-      }
-      */
-
-   case 3: //011 - Loss Report
+       case 3: //011 - Loss Report
+   {
+       int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
+       int32_t sack_num = sack_array[0];
+       fprintf( stderr, "recv_sack\t");
+       for(int i = 0; i < sack_num; i++) {
+           fprintf(stderr, "l:%d, r:%d\t", 
+                   sack_array[ SACK_LEFT(i) ],
+                   sack_array[ SACK_RIGHT(i) ]);
+       }
+       fprintf( stderr, "ack:%d\n", ctrlpkt.getAckSeqNo() );
+       break;
+   }
+   /*
       {
       int32_t* losslist = (int32_t *)(ctrlpkt.m_pcData);
 
@@ -2320,6 +2321,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
       break;
       }
+      */
 
    case 4: //100 - Delay Warning
       // One way packet delay is increasing, so decrease the sending rate
@@ -2374,6 +2376,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
       break;
 
    case 7: //111 - Msg drop request
+      /*
       m_pRcvBuffer->dropMsg(ctrlpkt.getMsgSeq());
       m_pRcvLossList->remove(*(int32_t*)ctrlpkt.m_pcData, *(int32_t*)(ctrlpkt.m_pcData + 4));
 
@@ -2383,6 +2386,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
       {
          m_iRcvCurrSeqNo = *(int32_t*)(ctrlpkt.m_pcData + 4);
       }
+      */
 
       break;
 
@@ -2576,6 +2580,31 @@ void CUDT::updateRcvWnd(CPacket& pkt)
     }
 }
 
+
+// [left, right), left to right-1 are all received
+void CUDT::getSackArray( int32_t* sack_array, int* sack_num) {
+    int sack_n = 0;
+    int32_t left = CSeqNo::incseq(m_iRcvCurrSeqNo);
+    for (; left <= m_iRcvHighSeqNo; left++) {
+        if( m_pRcvSeen[ left & m_iRcvWndMask ] == 0 )
+            continue;
+        for (int32_t right = left; ; right++) {
+            if (m_pRcvSeen[ right & m_iRcvWndMask ] == 0) {
+                sack_array[SACK_LEFT(sack_n)] = left;
+                sack_array[SACK_RIGHT(sack_n)] = right;
+                sack_n += 1;
+                if  (sack_n == m_iSackBlkNum)
+                    goto EXIT;
+                left = right;
+                break;
+            }
+        }
+    }
+
+EXIT:
+    *sack_num = sack_n;
+}
+
 int CUDT::processData(CUnit* unit)
 {
    CPacket& packet = unit->m_Packet;
@@ -2600,8 +2629,23 @@ int CUDT::processData(CUnit* unit)
    ++ m_llTraceRecv;
    ++ m_llRecvTotal;
 
+   /*
+   if (packet.m_iSeqNo == 100 ||
+           packet.m_iSeqNo == 100 ||
+           packet.m_iSeqNo == 110 )
+       return -1;
+       */
+
    fprintf(stderr, "recv_pkt, seq: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
            packet.m_iSeqNo, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
+
+   int32_t sack_num = 0;
+   int32_t sack_array [m_iSackBlkNum * 2 + 1];
+   bool do_append_sack = false;
+
+   if (CSeqNo::seqcmp(packet.m_iSeqNo, CSeqNo::incseq(m_iRcvCurrSeqNo)) > 0) {
+       do_append_sack = true;
+   }
 
    updateRcvWnd(packet);
 
@@ -2610,10 +2654,27 @@ int CUDT::processData(CUnit* unit)
       return -1;
 
    if (m_pRcvBuffer->addData(unit, offset) < 0)
-      return -1;
+       return -1;
 
+   if (do_append_sack) {
+       getSackArray( sack_array, &sack_num);
+       sack_array[0] = sack_num;
+   }
+   /*
+      for(int i = 0; i < sack_num; i++) {
+      fprintf(stderr, "l:%d, r:%d\t", 
+      sack_array[ SACK_LEFT(i) ],
+      sack_array[ SACK_RIGHT(i) ]);
+      }
+      fprintf(stderr, "ack:%d\n", CSeqNo::incseq(m_iRcvCurrSeqNo));
+      */
+   if (sack_num > 0) {
+       sendCtrl(3, NULL, sack_array, 4 * (2 * sack_num + 1) );
+   }
+   else {
+       sendCtrl(2);
+   }
 
-   sendCtrl(2);
    return 0;
    /*
    // Loss detection.

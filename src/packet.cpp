@@ -215,8 +215,9 @@ void CPacket::pack(int pkttype, void* lparam, void* rparam, int size)
       break;
       */
 
-   case 3: //0011 - Loss Report (NAK)
+   case 3: //0011 - Loss Report (SACK)
       // loss list
+      m_nHeader[1] = *(int32_t *)lparam;
       m_PacketVector[1].iov_base = (char *)rparam;
       m_PacketVector[1].iov_len = size;
 

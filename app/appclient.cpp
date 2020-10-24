@@ -142,6 +142,7 @@ DWORD WINAPI monitor(LPVOID s)
 
    UDT::TRACEINFO perf;
 
+   /*
    cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
 
    while (true)
@@ -167,6 +168,7 @@ DWORD WINAPI monitor(LPVOID s)
               perf.pktRecvNAK);
 
    }
+   */
 
    #ifndef WIN32
       return NULL;

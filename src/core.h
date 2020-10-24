@@ -351,11 +351,12 @@ private: // Sending related data
 
 private: // Receiving related data
    CRcvBuffer* m_pRcvBuffer;                    // Receiver buffer
-   CRcvLossList* m_pRcvLossList;                // Receiver loss list
+   //CRcvLossList* m_pRcvLossList;                // Receiver loss list
    //CACKWindow* m_pACKWindow;                    // ACK history window
    CPktTimeWindow* m_pRcvTimeWindow;            // Packet arrival time window
 
    int32_t* m_pRcvSeen;
+   const int m_iSackBlkNum = 3;
    int32_t m_iRcvWndMask;
    int32_t m_iRcvWndSize;
 
@@ -396,6 +397,7 @@ private: // Generation and processing of packets
    int listen(sockaddr* addr, CPacket& packet);
 
    void updateRcvWnd(CPacket& pkt);
+   void getSackArray( int32_t* sack_array, int* sack_num);
 
 private: // Trace
    uint64_t m_StartTime;                        // timestamp when the UDT entity is started

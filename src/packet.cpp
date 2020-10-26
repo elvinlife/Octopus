@@ -1,5 +1,4 @@
-/*****************************************************************************
-Copyright (c) 2001 - 2011, The Board of Trustees of the University of Illinois.
+/*****************************************************************************Copyright (c) 2001 - 2011, The Board of Trustees of the University of Illinois.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -100,8 +99,8 @@ written by
 //                            available receiver buffer size (in bytes)
 //                            advertised flow window size (number of packets)
 //                            estimated bandwidth (number of packets per second)
-//      3: Negative Acknowledgement (NAK)
-//              Add. Info:    Undefined
+//      3: Selective Acknowledgement (SACK)
+//              Add. Info:    ACK
 //              Control Info: Loss list (see loss list coding below)
 //      4: Congestion/Delay Warning
 //              Add. Info:    Undefined
@@ -322,7 +321,7 @@ int CPacket::getExtendedType() const
    return m_nHeader[0] & 0x0000FFFF;
 }
 
-int32_t CPacket::getAckSeqNo() const
+int32_t CPacket::getRcvAck() const
 {
    // read additional information field
    return m_nHeader[1];

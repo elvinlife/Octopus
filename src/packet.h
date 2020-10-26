@@ -140,13 +140,13 @@ public:
    int getExtendedType() const;
 
       // Functionality:
-      //    Read the ACK-2 seq. no.
+      //    Read the cumulative ack from receiver
       // Parameters:
       //    None.
       // Returned value:
       //    packet header field (bit 16~31).
 
-   int32_t getAckSeqNo() const;
+   int32_t getRcvAck() const;
 
       // Functionality:
       //    Read the message boundary flag bit.

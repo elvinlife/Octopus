@@ -53,6 +53,7 @@ written by
 #include "ccc.h"
 #include "cache.h"
 #include "queue.h"
+#include "scb.h"
 
 enum UDTSockType {UDT_STREAM = 1, UDT_DGRAM};
 
@@ -353,6 +354,7 @@ private: // Receiving related data
    CRcvBuffer* m_pRcvBuffer;                    // Receiver buffer
    //CRcvLossList* m_pRcvLossList;                // Receiver loss list
    //CACKWindow* m_pACKWindow;                    // ACK history window
+   ScoreBoard* m_pScoreBoard;
    CPktTimeWindow* m_pRcvTimeWindow;            // Packet arrival time window
 
    int32_t* m_pRcvSeen;

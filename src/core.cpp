@@ -86,6 +86,7 @@ CUDT::CUDT()
    m_pSndLossList = NULL;
    //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
+   m_pScoreBoard = NULL;
    m_pSndTimeWindow = NULL;
    m_pRcvTimeWindow = NULL;
 
@@ -140,6 +141,7 @@ CUDT::CUDT(const CUDT& ancestor)
    m_pSndLossList = NULL;
    //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
+   m_pScoreBoard = NULL;
    m_pSndTimeWindow = NULL;
    m_pRcvTimeWindow = NULL;
 
@@ -197,6 +199,7 @@ CUDT::~CUDT()
    delete m_pSndLossList;
    //delete m_pRcvLossList;
    //delete m_pACKWindow;
+   delete m_pScoreBoard;
    delete m_pSndTimeWindow;
    delete m_pRcvTimeWindow;
    delete m_pCCFactory;
@@ -774,6 +777,7 @@ POST_CONNECT:
       m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
       //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
+      m_pScoreBoard = new ScoreBoard(m_iPeerISN);
       m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
       m_pSndTimeWindow = new CPktTimeWindow();
    }
@@ -877,6 +881,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
       m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
       //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
+      m_pScoreBoard = new ScoreBoard(m_iISN);
       m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
       m_pSndTimeWindow = new CPktTimeWindow();
    }
@@ -1931,7 +1936,7 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
        m_pSndQueue->sendto(m_pPeerAddr, ctrlpkt);
 
        fprintf(stderr, "send_sack, ack: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
-               m_iRcvLastAck, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
+               ack, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
        break;
    }
        /*
@@ -2248,13 +2253,17 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
    {
        int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
        int32_t sack_num = sack_array[0];
+       m_pScoreBoard->update( ctrlpkt.getRcvAck(), sack_array );
+       m_pScoreBoard->dumpBoard();
+       /*
        fprintf( stderr, "recv_sack\t");
        for(int i = 0; i < sack_num; i++) {
            fprintf(stderr, "l:%d, r:%d\t", 
                    sack_array[ SACK_LEFT(i) ],
                    sack_array[ SACK_RIGHT(i) ]);
        }
-       fprintf( stderr, "ack:%d\n", ctrlpkt.getAckSeqNo() );
+       fprintf( stderr, "ack:%d\n", ctrlpkt.getRcvAck() );
+       */
        break;
    }
    /*
@@ -2466,7 +2475,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       // check congestion/flow window limit
       int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
 
-      fprintf(stderr, "packData called, cwnd:%d\t", cwnd);
+      //fprintf(stderr, "packData called, cwnd:%d\t", cwnd);
 
       if (cwnd >= CSeqNo::seqlen(m_iSndLastAck, CSeqNo::incseq(m_iSndCurrSeqNo)))
       {
@@ -2629,12 +2638,10 @@ int CUDT::processData(CUnit* unit)
    ++ m_llTraceRecv;
    ++ m_llRecvTotal;
 
-   /*
    if (packet.m_iSeqNo == 100 ||
            packet.m_iSeqNo == 100 ||
            packet.m_iSeqNo == 110 )
        return -1;
-       */
 
    fprintf(stderr, "recv_pkt, seq: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
            packet.m_iSeqNo, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);

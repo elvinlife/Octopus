@@ -50,7 +50,8 @@ class ScoreBoard
 {
 public:
     ScoreBoard(int ISN)
-        : ack_cumu_(ISN), sack_high_(ISN), rq_(ISN)
+        : ack_cumu_(ISN), sack_high_(ISN), 
+        seq_next_(ISN), rq_(ISN)
     { }
 
     ~ScoreBoard() {}

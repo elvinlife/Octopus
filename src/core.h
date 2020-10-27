@@ -330,7 +330,8 @@ private: // Status
 
 private: // Sending related data
    CSndBuffer* m_pSndBuffer;                    // Sender buffer
-   CSndLossList* m_pSndLossList;                // Sender loss list
+   //CSndLossList* m_pSndLossList;                // Sender loss list
+   ScoreBoard* m_pScoreBoard;                   // Sender scoreboard(loss list)
    CPktTimeWindow* m_pSndTimeWindow;            // Packet sending time window
 
    volatile uint64_t m_ullInterval;             // Inter-packet time, in CPU clock cycles
@@ -354,10 +355,9 @@ private: // Receiving related data
    CRcvBuffer* m_pRcvBuffer;                    // Receiver buffer
    //CRcvLossList* m_pRcvLossList;                // Receiver loss list
    //CACKWindow* m_pACKWindow;                    // ACK history window
-   ScoreBoard* m_pScoreBoard;
+   int32_t* m_pRcvSeen;                         // the received pkt seqs array
    CPktTimeWindow* m_pRcvTimeWindow;            // Packet arrival time window
 
-   int32_t* m_pRcvSeen;
    const int m_iSackBlkNum = 3;
    int32_t m_iRcvWndMask;
    int32_t m_iRcvWndSize;
@@ -379,7 +379,7 @@ private: // synchronization: mutexes and conditions
    pthread_cond_t m_SendBlockCond;              // used to block "send" call
    pthread_mutex_t m_SendBlockLock;             // lock associated to m_SendBlockCond
 
-   pthread_mutex_t m_AckLock;                   // used to protected sender's loss list when processing ACK
+   pthread_mutex_t m_AckLock;                   // used to protected sender's scoreboard when processing ACK
 
    pthread_cond_t m_RecvDataCond;               // used to block "recv" when there is no data
    pthread_mutex_t m_RecvDataLock;              // lock associated to m_RecvDataCond

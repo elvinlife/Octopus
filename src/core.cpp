@@ -83,7 +83,7 @@ CUDT::CUDT()
 {
    m_pSndBuffer = NULL;
    m_pRcvBuffer = NULL;
-   m_pSndLossList = NULL;
+   //m_pSndLossList = NULL;
    //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
    m_pScoreBoard = NULL;
@@ -138,7 +138,7 @@ CUDT::CUDT(const CUDT& ancestor)
 {
    m_pSndBuffer = NULL;
    m_pRcvBuffer = NULL;
-   m_pSndLossList = NULL;
+   //m_pSndLossList = NULL;
    //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
    m_pScoreBoard = NULL;
@@ -196,7 +196,7 @@ CUDT::~CUDT()
    // destroy the data structures
    delete m_pSndBuffer;
    delete m_pRcvBuffer;
-   delete m_pSndLossList;
+   //delete m_pSndLossList;
    //delete m_pRcvLossList;
    //delete m_pACKWindow;
    delete m_pScoreBoard;
@@ -774,7 +774,7 @@ POST_CONNECT:
       m_pSndBuffer = new CSndBuffer(32, m_iPayloadSize);
       m_pRcvBuffer = new CRcvBuffer(&(m_pRcvQueue->m_UnitQueue), m_iRcvBufSize);
       // after introducing lite ACK, the sndlosslist may not be cleared in time, so it requires twice space.
-      m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
+      //m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
       //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
       m_pScoreBoard = new ScoreBoard(m_iPeerISN);
@@ -878,7 +878,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    {
       m_pSndBuffer = new CSndBuffer(32, m_iPayloadSize);
       m_pRcvBuffer = new CRcvBuffer(&(m_pRcvQueue->m_UnitQueue), m_iRcvBufSize);
-      m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
+      //m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
       //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
       m_pScoreBoard = new ScoreBoard(m_iISN);
@@ -1819,7 +1819,7 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
 
            break;
        }
-       /*
+       /*{{{
       {
       int32_t ack;
 
@@ -1916,7 +1916,7 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
 
       break;
       }
-   */
+   *//*}}}*/
 
       /*
    case 6: //110 - Acknowledgement of Acknowledgement
@@ -1927,7 +1927,7 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
       break;
       */
 
-   case 3: //011 - Loss Report
+   case 3: //011 - Sack 
    {
        int32_t ack = CSeqNo::incseq(m_iRcvCurrSeqNo);
 
@@ -2079,7 +2079,8 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
            }
            if (CSeqNo::seqcmp(ack, m_iSndLastAck) >= 0)
            {
-               m_iFlowWindowSize -= CSeqNo::seqoff(m_iSndLastAck, ack);
+               // Update Flow Window Size, must update before and together with m_iSndLastAck
+               m_iFlowWindowSize = *((int32_t *)ctrlpkt.m_pcData + 3);
                m_iSndLastAck = ack;
            }
 
@@ -2104,7 +2105,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
            // update sending variables
            m_iSndLastDataAck = ack;
-           m_pSndLossList->remove(CSeqNo::decseq(m_iSndLastDataAck));
+           m_pScoreBoard->update( ack, NULL );
 
            CGuard::leaveCS(m_AckLock);
 
@@ -2127,7 +2128,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
            break;
        }
-       /*
+       /*{{{
       {
       int32_t ack;
 
@@ -2247,13 +2248,14 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
       break;
       }
-   */
+   *//*}}}*/
 
        case 3: //011 - Loss Report
    {
        int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
        int32_t sack_num = sack_array[0];
        m_pScoreBoard->update( ctrlpkt.getRcvAck(), sack_array );
+       fprintf(stderr, "recv_sack:\t");
        m_pScoreBoard->dumpBoard();
        /*
        fprintf( stderr, "recv_sack\t");
@@ -2266,7 +2268,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        */
        break;
    }
-   /*
+   /*{{{
       {
       int32_t* losslist = (int32_t *)(ctrlpkt.m_pcData);
 
@@ -2330,7 +2332,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
       break;
       }
-      */
+      *//*}}}*/
 
    case 4: //100 - Delay Warning
       // One way packet delay is increasing, so decrease the sending rate
@@ -2425,15 +2427,24 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 {
    int payload = 0;
    bool probe = false;
+   bool is_retran = false;
 
    uint64_t entertime;
    CTimer::rdtsc(entertime);
 
+
    if ((0 != m_ullTargetTime) && (entertime > m_ullTargetTime))
       m_ullTimeDiff += entertime - m_ullTargetTime;
 
+   fprintf(stderr, "packData called, cwnd:%.2f, rwnd: %d, SndLastAck: %d, SndCurrSeq: %d, scb_next: %d\n", 
+           m_dCongestionWindow,
+           m_iFlowWindowSize,
+           m_iSndLastAck,
+           CSeqNo::incseq(m_iSndCurrSeqNo),
+           m_pScoreBoard->getNextRetran());
+
    // Loss retransmission always has higher priority.
-   if ((packet.m_iSeqNo = m_pSndLossList->getLostSeq()) >= 0)
+   if ((packet.m_iSeqNo = m_pScoreBoard->getNextRetran()) >= 0)
    {
       // protect m_iSndLastDataAck from updating by ACK processing
       CGuard ackguard(m_AckLock);
@@ -2448,6 +2459,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
       if (-1 == payload)
       {
+          /*
          int32_t seqpair[2];
          seqpair[0] = packet.m_iSeqNo;
          seqpair[1] = CSeqNo::incseq(seqpair[0], msglen);
@@ -2461,10 +2473,15 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
              m_iSndCurrSeqNo = CSeqNo::incseq(seqpair[1]);
 
          return 0;
+         */
+          fprintf(stderr, "Error, readData failed: it's freed\n");
+          return 0;
       }
       else if (0 == payload)
          return 0;
 
+      m_pScoreBoard->markRetran( packet.m_iSeqNo );
+      is_retran = true;
       ++ m_iTraceRetrans;
       ++ m_iRetransTotal;
    }
@@ -2474,8 +2491,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
       // check congestion/flow window limit
       int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
-
-      //fprintf(stderr, "packData called, cwnd:%d\t", cwnd);
 
       if (cwnd >= CSeqNo::seqlen(m_iSndLastAck, CSeqNo::incseq(m_iSndCurrSeqNo)))
       {
@@ -2506,21 +2521,24 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          ts = 0;
          return 0;
       }
+
    }
 
    packet.m_iTimeStamp = int(CTimer::getTime() - m_StartTime);
    packet.m_iID = m_PeerID;
    packet.setLength(payload);
 
-   fprintf(stderr, "send_pkt, seq:%d, msg_id: %d SndLastAck: %d, SndCurrSeq: %d\n",
+   m_pCC->onPktSent(&packet);
+   //m_pSndTimeWindow->onPktSent(packet.m_iTimeStamp);
+
+   fprintf( stderr, "send_pkt, seq:%d, msg_id: %d SndLastAck: %d, SndCurrSeq: %d, is_retran: %d cwnd: %.2f rwnd: %d\n",
            packet.m_iSeqNo,
            packet.getMsgSeq(),
            m_iSndLastAck,
-           m_iSndCurrSeqNo
-           );
-
-   m_pCC->onPktSent(&packet);
-   //m_pSndTimeWindow->onPktSent(packet.m_iTimeStamp);
+           m_iSndCurrSeqNo,
+           (is_retran ? 1 : 0),
+           m_dCongestionWindow,
+           m_iFlowWindowSize);
 
    ++ m_llTraceSent;
    ++ m_llSentTotal;
@@ -2638,10 +2656,16 @@ int CUDT::processData(CUnit* unit)
    ++ m_llTraceRecv;
    ++ m_llRecvTotal;
 
-   if (packet.m_iSeqNo == 100 ||
-           packet.m_iSeqNo == 100 ||
-           packet.m_iSeqNo == 110 )
+   /*
+   bool drop_num = 3;
+   if ( (packet.m_iSeqNo == 100 ||
+           packet.m_iSeqNo == 150 ||
+           packet.m_iSeqNo == 110) 
+           && drop_num > 0) {
+       drop_num -= 1;
        return -1;
+   }
+   */
 
    fprintf(stderr, "recv_pkt, seq: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
            packet.m_iSeqNo, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
@@ -2888,6 +2912,7 @@ void CUDT::checkTimers()
       // recver: Send out a keep-alive packet
       if (m_pSndBuffer->getCurrBufSize() > 0)
       {
+          /*
          if ((CSeqNo::incseq(m_iSndCurrSeqNo) != m_iSndLastAck) && (m_pSndLossList->getLossLength() == 0))
          {
             // resend all unacknowledged packets on timeout, but only if there is no packet in the loss list
@@ -2896,6 +2921,7 @@ void CUDT::checkTimers()
             m_iTraceSndLoss += num;
             m_iSndLossTotal += num;
          }
+         */
 
          m_pCC->onTimeout();
          CCUpdate();

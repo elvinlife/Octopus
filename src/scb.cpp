@@ -17,6 +17,9 @@ seginfo* ReassemblyQueue::newseginfo()
 
 void ReassemblyQueue::deleteseginfo(seginfo* s)
 {
+    s->prev_ = NULL;
+    s->startseq_ = 0;
+    s->endseq_ = 0;
 	s->next_ = freelist_;
 	freelist_ = s;
 }
@@ -319,22 +322,25 @@ int32_t ScoreBoard::getNextRetran() {
 int ScoreBoard::update(int32_t last_ack, int32_t *sack_array) {
     if (ack_cumu_ < last_ack) {
         ack_cumu_ = last_ack;
-        if ( !rq_.empty() ) {
-            // clear rq until all seqs are beq than rcv_next_
-            rq_.clearto( rq_.rcv_next_ );
-        }
     }
     if (sack_high_ < last_ack) {
         sack_high_ = last_ack;
     }
-    int32_t n_sack = sack_array[0];
-    int32_t sack_left, sack_right;
-    for (int sack_index = 0; sack_index < n_sack; ++sack_index) {
-        sack_left = sack_array[SACK_LEFT(sack_index)];
-        sack_right = sack_array[SACK_RIGHT(sack_index)];
-        rq_.add(sack_left, sack_right);
-        if (sack_high_ < sack_right) {
-            sack_high_ = sack_right;
+    if ( !rq_.empty() && rq_.rcv_next_ < last_ack) {
+        rq_.rcv_next_ = last_ack;
+        rq_.clearto( last_ack );
+    }
+
+    if (sack_array) {
+        int32_t n_sack = sack_array[0];
+        int32_t sack_left, sack_right;
+        for (int sack_index = 0; sack_index < n_sack; ++sack_index) {
+            sack_left = sack_array[SACK_LEFT(sack_index)];
+            sack_right = sack_array[SACK_RIGHT(sack_index)];
+            rq_.add(sack_left, sack_right);
+            if (sack_high_ < sack_right) {
+                sack_high_ = sack_right;
+            }
         }
     }
     return 0;
@@ -346,8 +352,10 @@ void ScoreBoard::markRetran( int32_t retran_seq ) {
 }
 
 void ScoreBoard::dumpBoard() {
-    fprintf(stderr, "ack_cumu_: %d\tsack_high_: %d\tsegs:",
-            ack_cumu_, sack_high_);
+    fprintf(stderr, "ack_cumu_: %d,seq_next_:%d,sack_high_: %d,segs:",
+            ack_cumu_,
+            seq_next_,
+            sack_high_);
     rq_.dumpList();
     fprintf(stderr, "\n");
 }

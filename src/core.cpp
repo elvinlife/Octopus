@@ -2257,7 +2257,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        // protect packet retransmission
        CGuard::enterCS(m_AckLock);
        m_pScoreBoard->update( ctrlpkt.getRcvAck(), sack_array );
-       fprintf(stderr, "recv_sack, ts:%d",
+       fprintf(stderr, "recv_sack, ts:%ld",
                CTimer::getTime() - m_StartTime
               );
        m_pScoreBoard->dumpBoard();
@@ -2267,6 +2267,10 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        if (m_bSynSending)
            pthread_cond_signal(&m_SendBlockCond);
        pthread_mutex_unlock(&m_SendBlockLock);
+
+       // this will wake up the m_pSndUList from sleep (sleep results from no pkt/congestion)
+       // the lost packet (retransmission) should be sent out immediately
+       m_pSndQueue->m_pSndUList->update(this);
 
        CCUpdate();
        /*
@@ -2579,7 +2583,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            m_iSndLastAck,
            m_iSndCurrSeqNo,
            (is_retran ? 1 : 0),
-           ts - entertime
+           ts
            );
 
    m_ullTargetTime = ts;

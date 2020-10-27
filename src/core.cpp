@@ -2063,11 +2063,11 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        {
            int32_t ack = *(int32_t *)ctrlpkt.m_pcData;
 
-           fprintf(stderr, "recv_ack, ack:%d, SndLastAck: %d, SndCurrSeq: %d\n",
+           fprintf(stderr, "recv_ack, ack:%d, SndLastAck: %d, SndCurrSeq: %d, ts: %d\n",
                    ack,
                    m_iSndLastAck,
-                   m_iSndCurrSeqNo
-                  );
+                   m_iSndCurrSeqNo,
+                   CTimer::getTime() - m_StartTime);
 
            // check the validation of the ack
            if (CSeqNo::seqcmp(ack, CSeqNo::incseq(m_iSndCurrSeqNo)) > 0)
@@ -2084,16 +2084,15 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
                m_iSndLastAck = ack;
            }
 
-           // protect packet retransmission
-           CGuard::enterCS(m_AckLock);
-
            int offset = CSeqNo::seqoff(m_iSndLastDataAck, ack);
            if (offset <= 0)
            {
                // discard it if it is a repeated ACK
-               CGuard::leaveCS(m_AckLock);
                break;
            }
+
+           // protect packet retransmission
+           CGuard::enterCS(m_AckLock);
 
            // acknowledge the sending buffer
            m_pSndBuffer->ackData(offset);
@@ -2254,9 +2253,22 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
    {
        int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
        int32_t sack_num = sack_array[0];
+
+       // protect packet retransmission
+       CGuard::enterCS(m_AckLock);
        m_pScoreBoard->update( ctrlpkt.getRcvAck(), sack_array );
-       fprintf(stderr, "recv_sack:\t");
+       fprintf(stderr, "recv_sack, ts:%d",
+               CTimer::getTime() - m_StartTime
+              );
        m_pScoreBoard->dumpBoard();
+       CGuard::leaveCS(m_AckLock);
+
+       pthread_mutex_lock(&m_SendBlockLock);
+       if (m_bSynSending)
+           pthread_cond_signal(&m_SendBlockCond);
+       pthread_mutex_unlock(&m_SendBlockLock);
+
+       CCUpdate();
        /*
        fprintf( stderr, "recv_sack\t");
        for(int i = 0; i < sack_num; i++) {
@@ -2436,12 +2448,14 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    if ((0 != m_ullTargetTime) && (entertime > m_ullTargetTime))
       m_ullTimeDiff += entertime - m_ullTargetTime;
 
-   fprintf(stderr, "packData called, cwnd:%.2f, rwnd: %d, SndLastAck: %d, SndCurrSeq: %d, scb_next: %d\n", 
+   fprintf(stderr, "packData called, cwnd:%.2f, rwnd: %d, SndLastAck: %d, SndCurrSeq: %d, scb_next: %d, ts:%ld\n", 
            m_dCongestionWindow,
            m_iFlowWindowSize,
            m_iSndLastAck,
            CSeqNo::incseq(m_iSndCurrSeqNo),
-           m_pScoreBoard->getNextRetran());
+           m_pScoreBoard->getNextRetran(),
+           CTimer::getTime() - m_StartTime
+           );
 
    // Loss retransmission always has higher priority.
    if ((packet.m_iSeqNo = m_pScoreBoard->getNextRetran()) >= 0)
@@ -2531,14 +2545,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    m_pCC->onPktSent(&packet);
    //m_pSndTimeWindow->onPktSent(packet.m_iTimeStamp);
 
-   fprintf( stderr, "send_pkt, seq:%d, msg_id: %d SndLastAck: %d, SndCurrSeq: %d, is_retran: %d cwnd: %.2f rwnd: %d\n",
-           packet.m_iSeqNo,
-           packet.getMsgSeq(),
-           m_iSndLastAck,
-           m_iSndCurrSeqNo,
-           (is_retran ? 1 : 0),
-           m_dCongestionWindow,
-           m_iFlowWindowSize);
 
    ++ m_llTraceSent;
    ++ m_llSentTotal;
@@ -2566,6 +2572,15 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          }
       #endif
    }
+
+   fprintf( stderr, "send_pkt, seq:%d, msg_id: %d SndLastAck: %d, SndCurrSeq: %d, is_retran: %d send_ts: %ld\n",
+           packet.m_iSeqNo,
+           packet.getMsgSeq(),
+           m_iSndLastAck,
+           m_iSndCurrSeqNo,
+           (is_retran ? 1 : 0),
+           ts - entertime
+           );
 
    m_ullTargetTime = ts;
 

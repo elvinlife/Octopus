@@ -33,6 +33,7 @@ class ReassemblyQueue
         int empty() {return head_ == NULL; }
         void add( int32_t start, int32_t end );
         void clearto( int32_t seq );
+        void clear();
         int32_t nextHole( int32_t seq );
         void dumpList();
 
@@ -60,6 +61,7 @@ public:
     int update(int32_t ack, int32_t *sack_array);
     void markRetran(int32_t retran_seq);
     void dumpBoard();
+    void clear();
 
 private:
     int32_t ack_cumu_;  // current cumulative ack

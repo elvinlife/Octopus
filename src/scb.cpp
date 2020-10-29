@@ -254,6 +254,18 @@ endfast:
     }
 }
 
+void ReassemblyQueue::clear()
+{
+    seginfo* p = head_;
+    seginfo* q;
+    while(p) {
+        q = p->next_;
+        ReassemblyQueue::deleteseginfo(p);
+        p = q;
+    }
+    return;
+}
+
 // the segments will be cleared to only contain pkts
 // whose seqs are bigger than param1(seq)
 void ReassemblyQueue::clearto( int32_t seq )
@@ -314,9 +326,11 @@ int32_t ScoreBoard::getNextRetran() {
     if ( (seq = rq_.nextHole(seq)) > 0 ) {
         if (seq > seq_next_)
             seq_next_ = seq;
-        return seq;
     }
-    return -1;
+    if (seq < sack_high_)
+        return seq;
+    else
+        return -1;
 }
 
 int ScoreBoard::update(int32_t last_ack, int32_t *sack_array) {
@@ -352,10 +366,16 @@ void ScoreBoard::markRetran( int32_t retran_seq ) {
 }
 
 void ScoreBoard::dumpBoard() {
-    fprintf(stderr, "ack_cumu_: %d,seq_next_:%d,sack_high_: %d,segs:",
+    fprintf(stderr, "ack: %d, seq_next: %d, sack_high: %d, segs:",
             ack_cumu_,
             seq_next_,
             sack_high_);
     rq_.dumpList();
-    fprintf(stderr, "\n");
+}
+
+void ScoreBoard::clear() {
+    ack_cumu_ = 0;
+    sack_high_ = 0;
+    seq_next_ = 0;
+    rq_.clear();
 }

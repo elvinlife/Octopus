@@ -1789,8 +1789,8 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
            int32_t data[6];
 
            data[0] = m_iRcvLastAck;
-           data[1] = m_iRTT;
-           data[2] = m_iRTTVar;
+           //data[1] = m_iRTT;
+           //data[2] = m_iRTTVar;
            data[3] = m_pRcvBuffer->getAvailBufSize();
            // a minimum flow window of 2 is used, even if buffer is full, to break potential deadlock
            if (data[3] < 2)
@@ -2470,7 +2470,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
       if (-1 == payload)
       {
-          throw std::runtime_error("readData failed, it's freed\n"); 
+          throw std::runtime_error("Sender readData failed!\n"); 
       }
       else if (0 == payload)
          return 0;
@@ -2574,17 +2574,15 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 void CUDT::updateRcvWnd(CPacket& pkt)
 {
     while( pkt.m_iSeqNo + 1 - m_iRcvCurrSeqNo >= (m_iRcvWndSize - 1) ) {
-        throw std::runtime_error("RecvWnd size not enough!\n");
+        throw std::runtime_error("Recv window overflow!\n");
     }
     // duplicate pkt
     if ( pkt.m_iSeqNo <= m_iRcvCurrSeqNo ) {
-        fprintf( stderr, "duplicate pkt\n" );
         return;
     }
     if ( pkt.m_iSeqNo > m_iRcvCurrSeqNo &&
             pkt.m_iSeqNo < m_iRcvHighSeqNo &&
             m_pRcvSeen[ pkt.m_iSeqNo & m_iRcvWndMask ] ) {
-        fprintf( stderr, "duplicate pkt\n" );
         return;
     }
     // pkt.seq is gt max_seen
@@ -2655,33 +2653,25 @@ int CUDT::processData(CUnit* unit)
    ++ m_llTraceRecv;
    ++ m_llRecvTotal;
 
-   /*
-   bool drop_num = 3;
-   if ( (packet.m_iSeqNo == 100 ||
-           packet.m_iSeqNo == 150 ||
-           packet.m_iSeqNo == 110) 
-           && drop_num > 0) {
-       drop_num -= 1;
-       return -1;
-   }
-   */
-
    fprintf(stderr, "recv_pkt, seq: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
            packet.m_iSeqNo, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
 
+   // 1. update recv window to get correct ack
+   // 2. save the data unit in recv_buffer
+   updateRcvWnd(packet);
+   int32_t offset = CSeqNo::seqoff(m_iRcvLastAck, packet.m_iSeqNo);
+   if ( offset >= m_pRcvBuffer->getAvailBufSize() ) {
+       throw std::runtime_error("Recv buffer overflow!\n");
+   }
+   if (m_pRcvBuffer->addData(unit, offset) < 0) {
+       fprintf( stderr, "duplicate pkt\n" );
+   }
+
+   // ack anyway
    int32_t sack_num = 0;
    int32_t sack_array [m_iSackBlkNum * 2 + 1];
 
-   updateRcvWnd(packet);
-
-   int32_t offset = CSeqNo::seqoff(m_iRcvLastAck, packet.m_iSeqNo);
-   if ((offset < 0) || (offset >= m_pRcvBuffer->getAvailBufSize()))
-      return -1;
-
-   if (m_pRcvBuffer->addData(unit, offset) < 0)
-       return -1;
-
-   getSackArray( sack_array, &sack_num);
+   getSackArray( sack_array, &sack_num );
    sack_array[0] = sack_num;
 
    if (sack_num > 0) {

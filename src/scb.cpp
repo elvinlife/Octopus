@@ -1,4 +1,5 @@
 #include "scb.h"
+#include <stdexcept>
 
 seginfo* ReassemblyQueue::freelist_ = NULL;
 int ReassemblyQueue::n_scb_ = 0;
@@ -309,6 +310,8 @@ void ReassemblyQueue::dumpList()
 {
     seginfo* p;
     for (p = head_; p; p = p->next_) {
+        if (p == p->next_)
+            throw std::runtime_error(" Segment point to itself\n ");
         fprintf(stderr, "[%d, %d]\t", 
                 p->startseq_, p->endseq_);
     }

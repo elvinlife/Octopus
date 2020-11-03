@@ -264,6 +264,7 @@ void ReassemblyQueue::clear()
         ReassemblyQueue::deleteseginfo(p);
         p = q;
     }
+    head_ = tail_ = NULL;
     return;
 }
 

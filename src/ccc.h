@@ -212,7 +212,7 @@ protected:
    double m_dMaxCWndSize;               // maximum cwnd size, in packets
 
    int m_iMSS;				// Maximum Packet Size, including all packet headers
-   int32_t m_iSndCurrSeqNo;		// current maximum seq no sent out
+   int32_t m_iSndCurrSeqNo;		// current maximum seq sent out
    int m_iRcvRate;			// packet arrive rate at receiver side, packets per second
    int m_iRTT;				// current estimated RTT, microsecond
 

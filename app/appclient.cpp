@@ -103,28 +103,16 @@ int main(int argc, char* argv[])
 
    for (int i = 0; i < 1000000; i ++)
    {
-      int ssize = 0;
-      int ss;
-      while (ssize < size)
-      {
-          /*
-         if (UDT::ERROR == (ss = UDT::send(client, data + ssize, size - ssize, 0)))
-         {
-            cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
-            break;
-         }
-         */
-         if (UDT::ERROR == (ss = UDT::sendmsg(client, data + ssize, size - ssize, (1<<20), 1)))
-         {
-            cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
-            break;
-         }
-
-         ssize += ss;
-      }
-
-      if (ssize < size)
-         break;
+       int ss;
+       if (UDT::ERROR == (ss = UDT::sendmsg(client, data, size, (1<<20), 1, 0, (uint32_t)i)))
+       {
+           cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
+           break;
+       }
+       if (ss != size) {
+           fprintf(stderr, "Error, size: %d, ss:%d\n", size, ss);
+           exit(0);
+       }
    }
 
    UDT::close(client);

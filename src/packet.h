@@ -63,11 +63,13 @@ friend class CRcvQueue;
 public:
    int32_t& m_iSeqNo;                   // alias: sequence number
    int32_t& m_iMsgNo;                   // alias: message number
-   int32_t& m_iTimeStamp;               // alias: timestamp
-   int32_t& m_iID;			// alias: socket ID
+   int32_t& m_iExtra;                   // alias: Extra field
+   int32_t& m_iID;                      // alias: socket ID
+   int32_t& m_iUId;                     // alias: unique pkt number 
    char*& m_pcData;                     // alias: data/control information
 
    static const int m_iPktHdrSize;	// packet header size
+   int32_t m_iSendTs;                   // alias: timestamp
 
 public:
    CPacket();
@@ -166,12 +168,17 @@ public:
 
    bool getMsgOrderFlag() const;
 
+   int getMsgPriority() const;
+
+   int getMsgGroupId() const;
+
       // Functionality:
       //    Read the message sequence number.
       // Parameters:
       //    None.
       // Returned value:
       //    packet header field [1] (bit 3~31).
+      //
 
    int32_t getMsgSeq() const;
 
@@ -185,7 +192,7 @@ public:
    CPacket* clone() const;
 
 protected:
-   uint32_t m_nHeader[4];               // The 128-bit header field
+   uint32_t m_nHeader[5];               // The 128-bit header field
    iovec m_PacketVector[2];             // The 2-demension vector of UDT packet [header, data]
 
    int32_t __pad;

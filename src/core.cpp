@@ -1228,7 +1228,7 @@ int CUDT::recv(char* data, int len)
    return res;
 }
 
-int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder)
+int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, int8_t priority, int32_t gid)
 {
    if (UDT_STREAM == m_iSockType)
       throw CUDTException(5, 9, 0);
@@ -1317,7 +1317,7 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder)
       m_llSndDurationCounter = CTimer::getTime();
 
    // insert the user buffer into the sening list
-   m_pSndBuffer->addBuffer(data, len, msttl, inorder);
+   m_pSndBuffer->addBuffer(data, len, msttl, inorder, priority, gid);
 
    // insert this socket to the snd list if it is not on the list yet
    m_pSndQueue->m_pSndUList->update(this, false);
@@ -2251,7 +2251,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
    {
        int32_t ack = ctrlpkt.getRcvAck();
        int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
-       int32_t sack_num = sack_array[0];
+       //int32_t sack_num = sack_array[0];
 
        int offset = CSeqNo::seqoff(m_iSndLastDataAck, ack);
        // protect packet retransmission
@@ -2456,7 +2456,11 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
       int msglen;
 
-      payload = m_pSndBuffer->readData(&(packet.m_pcData), offset, packet.m_iMsgNo, msglen);
+      //payload = m_pSndBuffer->readData(&(packet.m_pcData), offset, packet.m_iMsgNo, msglen);
+      Block block;
+      payload = m_pSndBuffer->readData(&block, offset);
+      packet.m_pcData = block.m_pcData;
+      packet.m_iMsgNo = block.m_iMsgNo;
 
       if (-1 == payload)
       {
@@ -2479,13 +2483,20 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
       if (cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo)))
       {
-         if (0 != (payload = m_pSndBuffer->readData(&(packet.m_pcData), packet.m_iMsgNo)))
+         Block block;
+         //if (0 != (payload = m_pSndBuffer->readData(&(packet.m_pcData), packet.m_iMsgNo)))
+         if (0 != (payload = m_pSndBuffer->readData(&block) ) )
          {
             m_iSndCurrSeqNo = CSeqNo::incseq(m_iSndCurrSeqNo);
             m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
 
+            packet.m_pcData = block.m_pcData;
             packet.m_iSeqNo = m_iSndCurrSeqNo;
+            packet.m_iMsgNo = block.m_iMsgNo;
+            packet.m_iExtra = block.m_iExtra;
             
+            fprintf(stderr, "m_iExtra: %x\n", block.m_iExtra);
+
             if (packet.m_iSeqNo > m_iSndHighSeqNo)
                 m_iSndHighSeqNo = packet.m_iSeqNo;
 
@@ -2512,7 +2523,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    }
 
-   packet.m_iTimeStamp = int(CTimer::getTime() - m_StartTime);
+   packet.m_iSendTs = int(CTimer::getTime() - m_StartTime);
    packet.m_iID = m_PeerID;
    packet.setLength(payload);
 
@@ -2547,9 +2558,11 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       #endif
    }
 
-   fprintf( stderr, "send_pkt, seq:%d, msg_id: %d SndCumuAck: %d, SndCurrSeq: %d, is_retran: %d send_ts: %ld\n",
+   fprintf( stderr, "send_pkt, seq:%d, msg_id: %d gid: %d SndCumuAck: %d, SndCurrSeq: %d, is_retran: %d send_ts: %ld\n",
            packet.m_iSeqNo,
            packet.getMsgSeq(),
+           packet.getMsgGroupId(),
+           //packet.m_iExtra,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
            (is_retran ? 1 : 0),
@@ -2643,15 +2656,22 @@ int CUDT::processData(CUnit* unit)
    ++ m_llTraceRecv;
    ++ m_llRecvTotal;
 
-   fprintf(stderr, "recv_pkt, seq: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
-           packet.m_iSeqNo, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
+   fprintf(stderr, "recv_pkt, seq: %d gid: %d RcvCurrSeq: %d RcvHighSeq: %d recv_buf: %d\n", 
+           packet.m_iSeqNo, 
+           packet.getMsgGroupId(),
+           m_iRcvCurrSeqNo, 
+           m_iRcvHighSeqNo, 
+           m_pRcvBuffer->getAvailBufSize() );
 
    // 1. update recv window to get correct ack
    // 2. save the data unit in recv_buffer
    updateRcvWnd(packet);
    int32_t offset = CSeqNo::seqoff(m_iRcvLastAck, packet.m_iSeqNo);
    if ( offset >= m_pRcvBuffer->getAvailBufSize() ) {
-       throw std::runtime_error("Recv buffer overflow!\n");
+       char error_str[100];
+       sprintf( error_str, "Recv buffer overflow, last_ack: %u, seq: %u, bufsize: %u\n",
+               m_iRcvLastAck, packet.m_iSeqNo, m_pRcvBuffer->getAvailBufSize() );
+       throw std::runtime_error(error_str);
    }
    if (m_pRcvBuffer->addData(unit, offset) < 0) {
        fprintf( stderr, "duplicate pkt\n" );

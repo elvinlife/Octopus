@@ -47,6 +47,19 @@ written by
 #include "queue.h"
 #include <fstream>
 
+struct Block
+{
+    char* m_pcData;                   // pointer to the data block
+    int m_iLength;                    // length of the block
+
+    int32_t m_iMsgNo;                 // message number
+    uint32_t m_iExtra;
+    uint64_t m_OriginTime;            // original request time
+    int m_iTTL;                       // time to live (milliseconds)
+
+    Block* m_pNext;                   // next block
+};
+
 class CSndBuffer
 {
 public:
@@ -63,7 +76,7 @@ public:
       // Returned value:
       //    None.
 
-   void addBuffer(const char* data, int len, int ttl = -1, bool order = false);
+   void addBuffer(const char* data, int len, int ttl = -1, bool order = false, int8_t priority = 0, int32_t gid = 0);
 
       // Functionality:
       //    Read a block of data from file and insert it into the sending list.
@@ -97,6 +110,14 @@ public:
 
    int readData(char** data, const int offset, int32_t& msgno, int& msglen);
 
+   // offset=0, read the current block
+   // offset>0, read the first_block + offset for a retransmission
+   // Parameters:
+   //   0) [out] block
+   //   1) [in] offset
+
+   int readData(Block* block, const int offset = 0);
+
       // Functionality:
       //    Update the ACK point and may release/unmap/return the user data according to the flag.
       // Parameters:
@@ -121,6 +142,7 @@ private:
 private:
    pthread_mutex_t m_BufLock;           // used to synchronize buffer operation
 
+   /*
    struct Block
    {
       char* m_pcData;                   // pointer to the data block
@@ -132,6 +154,8 @@ private:
 
       Block* m_pNext;                   // next block
    } *m_pBlock, *m_pFirstBlock, *m_pCurrBlock, *m_pLastBlock;
+   */
+   Block *m_pBlock, *m_pFirstBlock, *m_pCurrBlock, *m_pLastBlock;
 
    // m_pBlock:         The head pointer
    // m_pFirstBlock:    The first block

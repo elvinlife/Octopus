@@ -51,7 +51,8 @@ m_pFirstBlock(NULL),
 m_pCurrBlock(NULL),
 m_pLastBlock(NULL),
 m_pBuffer(NULL),
-m_iNextMsgNo(1),
+//m_iNextMsgNo(1),
+m_iNextMsgNo(0),
 m_iSize(size),
 m_iMSS(mss),
 m_iCount(0)
@@ -117,7 +118,7 @@ CSndBuffer::~CSndBuffer()
    #endif
 }
 
-void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order)
+void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, int8_t priority, int32_t gid)
 {
    int size = len / m_iMSS;
    if ((len % m_iMSS) != 0)
@@ -140,6 +141,17 @@ void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order)
 
       memcpy(s->m_pcData, data + i * m_iMSS, pktlen);
       s->m_iLength = pktlen;
+
+      // 0-7: priority
+      // 8: enable_g
+      // 16-32: gid
+      s->m_iExtra = priority;
+      s->m_iExtra = s->m_iExtra << 24;
+      if (gid != -1) {
+          s->m_iExtra |= 0x00800000;
+          s->m_iExtra |= ((uint32_t)gid & 0x0000ffff);
+      }
+      //fprintf(stderr, "addBuffer, m_iExtra: %x, priority: %x, msgno: %x\n", s->m_iExtra, priority, m_iNextMsgNo );
 
       s->m_iMsgNo = m_iNextMsgNo | inorder;
       if (i == 0)
@@ -263,6 +275,33 @@ int CSndBuffer::readData(char** data, const int offset, int32_t& msgno, int& msg
    msgno = p->m_iMsgNo;
 
    return readlen;
+}
+
+int CSndBuffer::readData( Block* block, const int offset )
+{
+    Block* to_read = NULL;
+    if (offset == 0) {
+        if (m_pCurrBlock == m_pLastBlock)
+            return 0;
+        to_read = m_pCurrBlock;
+        goto copy;
+    }
+    else {
+        CGuard bufferguard(m_BufLock);
+        to_read = m_pFirstBlock;
+        for (int i = 0; i < offset; ++ i) {
+            to_read = to_read->m_pNext;
+            if (!to_read)
+                return -1;
+        }
+    }
+copy:
+
+    block->m_pcData     = to_read->m_pcData;
+    block->m_iLength    = to_read->m_iLength;
+    block->m_iMsgNo     = to_read->m_iMsgNo;
+    block->m_iExtra     = to_read->m_iExtra;
+    return block->m_iLength;
 }
 
 void CSndBuffer::ackData(int offset)

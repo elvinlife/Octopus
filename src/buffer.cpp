@@ -40,6 +40,7 @@ written by
 
 #include <cstring>
 #include <cmath>
+#include <exception>
 #include "buffer.h"
 
 using namespace std;
@@ -277,6 +278,35 @@ int CSndBuffer::readData(char** data, const int offset, int32_t& msgno, int& msg
    return readlen;
 }
 
+Block* CSndBuffer::readCurrData()
+{
+   if (m_pCurrBlock == m_pLastBlock)
+      return NULL;
+   Block* ret = m_pCurrBlock;
+   m_pCurrBlock = m_pCurrBlock->m_pNext;
+   return ret;
+}
+
+Block* CSndBuffer::readData( const int offset, int seq )
+{
+   CGuard bufferguard(m_BufLock);
+
+   Block* p = m_pFirstBlock;
+
+   for (int i = 0; i < offset; ++ i) {
+      p = p->m_pNext;
+      if (!p || p == m_pCurrBlock) {
+          throw std::runtime_error("retransmission read unread data\n");
+      }
+   }
+   if (p->seq_ != seq) {
+       fprintf(stderr, "seq wanted: %d; seq read: %d\n", seq, p->seq_);
+       throw std::runtime_error("packet read inconsistency\n");
+   }
+   return p;
+}
+
+/*
 int CSndBuffer::readData( Block* block, const int offset )
 {
     Block* to_read = NULL;
@@ -303,6 +333,7 @@ copy:
     block->m_iExtra     = to_read->m_iExtra;
     return block->m_iLength;
 }
+*/
 
 void CSndBuffer::ackData(int offset)
 {

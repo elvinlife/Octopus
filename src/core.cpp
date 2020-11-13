@@ -618,6 +618,7 @@ void CUDT::connect(const sockaddr* serv_addr)
    m_iSndLastAck = m_iISN;
    m_iSndLastDataAck = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
+   m_iSndHighSeqNo = m_iISN - 1;
    //m_iSndLastAck2 = m_iISN;
    m_ullSndLastAck2Time = CTimer::getTime();
 
@@ -861,6 +862,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    m_iSndLastAck = m_iISN;
    m_iSndLastDataAck = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
+   m_iSndHighSeqNo = m_iISN - 1;
    //m_iSndLastAck2 = m_iISN;
    m_ullSndLastAck2Time = CTimer::getTime();
 
@@ -2435,13 +2437,13 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    if ((0 != m_ullTargetTime) && (entertime > m_ullTargetTime))
       m_ullTimeDiff += entertime - m_ullTargetTime;
 
-   fprintf(stderr, "packData called, cwnd:%.2f, rwnd: %d, SndCumuAck: %d, SndCurrSeq: %d, scb_next: %d, ts:%ld\n", 
+   fprintf(stderr, "packData called, cwnd:%.2f, rwnd: %d, SndCumuAck: %d, SndCurrSeq: %d, SndHighSeq: %d, scb_next: %d\n", 
            m_dCongestionWindow,
            m_iFlowWindowSize,
            m_iSndLastDataAck,
-           CSeqNo::incseq(m_iSndCurrSeqNo),
-           m_pScoreBoard->getNextRetran(),
-           CTimer::getTime() - m_StartTime
+           m_iSndCurrSeqNo,
+           m_iSndHighSeqNo,
+           m_pScoreBoard->getNextRetran()
            );
 
    // Loss retransmission always has higher priority.
@@ -2457,17 +2459,15 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       int msglen;
 
       //payload = m_pSndBuffer->readData(&(packet.m_pcData), offset, packet.m_iMsgNo, msglen);
-      Block block;
-      payload = m_pSndBuffer->readData(&block, offset);
-      packet.m_pcData = block.m_pcData;
-      packet.m_iMsgNo = block.m_iMsgNo;
+      if (CSeqNo::seqcmp( packet.m_iSeqNo, m_iSndHighSeqNo ) > 0 )
+          throw std::runtime_error("resend seq bigger than SndHighSeqNo!\n");
 
-      if (-1 == payload)
-      {
-          throw std::runtime_error("Sender readData failed!\n"); 
-      }
-      else if (0 == payload)
-         return 0;
+      Block* block = m_pSndBuffer->readData( offset, packet.m_iSeqNo );
+
+      packet.m_pcData = block->m_pcData;
+      packet.m_iMsgNo = block->m_iMsgNo;
+      packet.m_iExtra = block->m_iExtra;
+      payload = block->m_iLength;
 
       m_pScoreBoard->markRetran( packet.m_iSeqNo );
       is_retran = true;
@@ -2483,19 +2483,28 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
       if (cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo)))
       {
-         Block block;
-         //if (0 != (payload = m_pSndBuffer->readData(&(packet.m_pcData), packet.m_iMsgNo)))
-         if (0 != (payload = m_pSndBuffer->readData(&block) ) )
+         Block* block = NULL;
+         if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
+            block = m_pSndBuffer->readCurrData();
+            block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
+         }
+         else {
+            block = m_pSndBuffer->readData( 
+                    CSeqNo::seqoff( m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo) ),
+                    CSeqNo::incseq(m_iSndCurrSeqNo)
+                    );
+         }
+         //if (0 != (payload = m_pSndBuffer->readData(&block) ) )
+         if (block)
          {
             m_iSndCurrSeqNo = CSeqNo::incseq(m_iSndCurrSeqNo);
             m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
 
-            packet.m_pcData = block.m_pcData;
             packet.m_iSeqNo = m_iSndCurrSeqNo;
-            packet.m_iMsgNo = block.m_iMsgNo;
-            packet.m_iExtra = block.m_iExtra;
-            
-            fprintf(stderr, "m_iExtra: %x\n", block.m_iExtra);
+            packet.m_pcData = block->m_pcData;
+            packet.m_iMsgNo = block->m_iMsgNo;
+            packet.m_iExtra = block->m_iExtra;
+            payload = block->m_iLength;
 
             if (packet.m_iSeqNo > m_iSndHighSeqNo)
                 m_iSndHighSeqNo = packet.m_iSeqNo;

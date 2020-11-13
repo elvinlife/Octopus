@@ -57,6 +57,8 @@ struct Block
     uint64_t m_OriginTime;            // original request time
     int m_iTTL;                       // time to live (milliseconds)
 
+    int seq_;
+
     Block* m_pNext;                   // next block
 };
 
@@ -110,13 +112,10 @@ public:
 
    int readData(char** data, const int offset, int32_t& msgno, int& msglen);
 
-   // offset=0, read the current block
-   // offset>0, read the first_block + offset for a retransmission
-   // Parameters:
-   //   0) [out] block
-   //   1) [in] offset
 
-   int readData(Block* block, const int offset = 0);
+   Block* readCurrData();
+   Block* readData( const int offset, int seq );
+   //int readData(Block* block, const int offset = 0);
 
       // Functionality:
       //    Update the ACK point and may release/unmap/return the user data according to the flag.

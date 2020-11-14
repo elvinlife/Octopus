@@ -88,6 +88,7 @@ CUDT::CUDT()
    //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
    m_pScoreBoard = NULL;
+   m_pRateSample = NULL;
    m_pSndTimeWindow = NULL;
    m_pRcvTimeWindow = NULL;
 
@@ -143,6 +144,7 @@ CUDT::CUDT(const CUDT& ancestor)
    //m_pRcvLossList = NULL;
    //m_pACKWindow = NULL;
    m_pScoreBoard = NULL;
+   m_pRateSample = NULL;
    m_pSndTimeWindow = NULL;
    m_pRcvTimeWindow = NULL;
 
@@ -201,6 +203,7 @@ CUDT::~CUDT()
    //delete m_pRcvLossList;
    //delete m_pACKWindow;
    delete m_pScoreBoard;
+   delete m_pRateSample;
    delete m_pSndTimeWindow;
    delete m_pRcvTimeWindow;
    delete m_pCCFactory;
@@ -780,6 +783,7 @@ POST_CONNECT:
       //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
       m_pScoreBoard = new ScoreBoard(m_iPeerISN);
+      m_pRateSample = new RateSample();
       m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
       m_pSndTimeWindow = new CPktTimeWindow();
    }
@@ -885,6 +889,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
       //m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
       //m_pACKWindow = new CACKWindow(1024);
       m_pScoreBoard = new ScoreBoard(m_iISN);
+      m_pRateSample = new RateSample();
       m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
       m_pSndTimeWindow = new CPktTimeWindow();
    }
@@ -2094,6 +2099,9 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
            if (CSeqNo::seqcmp(m_iSndLastDataAck, m_iSndCurrSeqNo) > 0)
                m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
 
+           Block* block = m_pSndBuffer->readData( offset - 1, ack - 1 );
+           m_pRateSample->onAck( block );
+
            // record total time used for sending
            m_llSndDuration += currtime - m_llSndDurationCounter;
            m_llSndDurationTotal += currtime - m_llSndDurationCounter;
@@ -2478,7 +2486,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    {
       // If no loss, pack a new packet.
 
-      // check congestion/flow window limit
+      // check congestion/flow window limet
       int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
 
       if (cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo)))
@@ -2500,6 +2508,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
             m_iSndCurrSeqNo = CSeqNo::incseq(m_iSndCurrSeqNo);
             m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
 
+            m_pRateSample->onPktSent(block);
             packet.m_iSeqNo = m_iSndCurrSeqNo;
             packet.m_pcData = block->m_pcData;
             packet.m_iMsgNo = block->m_iMsgNo;

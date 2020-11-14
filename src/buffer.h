@@ -58,6 +58,10 @@ struct Block
     int m_iTTL;                       // time to live (milliseconds)
 
     int seq_;
+    int64_t delivered_;
+    int64_t delivered_ts_;
+    int64_t first_sent_ts_;
+    int64_t sent_ts_;
 
     Block* m_pNext;                   // next block
 };

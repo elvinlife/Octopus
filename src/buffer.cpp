@@ -300,7 +300,13 @@ Block* CSndBuffer::readData( const int offset, int seq )
       }
    }
    if (p->seq_ != seq) {
-       fprintf(stderr, "seq wanted: %d; seq read: %d\n", seq, p->seq_);
+       Block* p = m_pFirstBlock;
+       fprintf(stderr, "seq wanted: %d; seq read: %d; offset: %d\n",
+               seq, p->seq_, offset);
+       while (p != m_pCurrBlock->m_pNext) {
+           fprintf(stderr, "%d\t", p->seq_);
+           p = p->m_pNext;
+       }
        throw std::runtime_error("packet read inconsistency\n");
    }
    return p;

@@ -241,6 +241,14 @@ void CTimer::tick()
    #endif
 }
 
+uint64_t CTimer::initTime()
+{
+    timeval t;
+    gettimeofday(&t, 0);
+    static uint64_t init_ts = t.tv_sec * 1000000ULL + t.tv_usec;
+    return init_ts;
+}
+
 uint64_t CTimer::getTime()
 {
    //For Cygwin and other systems without microsecond level resolution, uncomment the following three lines
@@ -252,7 +260,7 @@ uint64_t CTimer::getTime()
    #ifndef WIN32
       timeval t;
       gettimeofday(&t, 0);
-      return t.tv_sec * 1000000ULL + t.tv_usec;
+      return t.tv_sec * 1000000ULL + t.tv_usec - initTime();
    #else
       LARGE_INTEGER ccf;
       HANDLE hCurThread = ::GetCurrentThread(); 

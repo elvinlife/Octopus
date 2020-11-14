@@ -135,6 +135,7 @@ public:
       // Returned value:
       //    current time in microseconds.
 
+   static uint64_t initTime();
    static uint64_t getTime();
 
       // Functionality:

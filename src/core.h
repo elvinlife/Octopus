@@ -54,6 +54,7 @@ written by
 #include "cache.h"
 #include "queue.h"
 #include "scb.h"
+#include "ratesample.h"
 
 enum UDTSockType {UDT_STREAM = 1, UDT_DGRAM};
 
@@ -333,6 +334,7 @@ private: // Sending related data
    CSndBuffer* m_pSndBuffer;                    // Sender buffer
    //CSndLossList* m_pSndLossList;                // Sender loss list
    ScoreBoard* m_pScoreBoard;                   // Sender scoreboard(loss list)
+   RateSample* m_pRateSample;                   // Sender rate sample
    CPktTimeWindow* m_pSndTimeWindow;            // Packet sending time window
 
    volatile uint64_t m_ullInterval;             // Inter-packet time, in CPU clock cycles

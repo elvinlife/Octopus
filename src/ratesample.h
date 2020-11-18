@@ -6,22 +6,22 @@
 class RateSample
 {
     // rate sample related info 
-    int64_t prior_delivered_;
-    int64_t prior_delivered_ts_;
-    int64_t interval_;
-    int64_t ack_elapsed_;
-    int64_t send_elapsed_;
+    uint64_t prior_delivered_;
+    uint64_t prior_delivered_ts_;
+    uint64_t interval_;
+    uint64_t ack_elapsed_;
+    uint64_t send_elapsed_;
     float   delivery_rate_;
 
     // connection related info 
-    int64_t cumu_delivered_;
-    int64_t cumu_delivered_ts_;
-    int64_t first_sent_ts_;
+    uint64_t cumu_delivered_;
+    uint64_t cumu_delivered_ts_;
+    uint64_t first_sent_ts_;
 
     bool    is_app_limited_;
     bool    packet_lost_;
 
-    int64_t pkts_in_flight_;
+    uint64_t pkts_in_flight_;
     int     highest_seq_sent_;
     int     highest_ack_;
 

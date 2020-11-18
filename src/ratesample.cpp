@@ -27,6 +27,15 @@ void RateSample::onAck(Block* block)
     }
     setPacketLost( false );
     updateRateSample(block);
+    /*
+    fprintf(stderr, "on_ack, send_elapse: %ld, ack_elapse: %ld, cumu_deliver: %ld,\
+            prior_deliver: %ld prior_deliver_ts: %ld\n", 
+            send_elapsed_, 
+            ack_elapsed_,
+            cumu_delivered_,
+            prior_delivered_,
+            prior_delivered_ts_);
+            */
     if (prior_delivered_ts_ == 0)
         return;
     interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;

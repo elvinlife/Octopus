@@ -17,10 +17,13 @@ struct Filter
     int last_round_;    // inclusive
     double *value_array_ = NULL;
     
-    Filter( int window_len )
+    Filter( int window_len, float init_value )
         : window_len_( window_len ),
         first_round_( 0 ),
-        value_array_( new double[window_len+1] ) {}
+        last_round_( 0 ),
+        value_array_( new double[window_len+1] ) {
+            value_array_[0] = init_value;
+        }
     
     ~Filter() { delete value_array_; }
     
@@ -51,8 +54,11 @@ class CBBR: public CCC
         using CCC::CCC;
 
         CBBR() 
-            :btl_bw_filter_( BtlBWFilterLen ), 
+            :btl_bw_ ( getThroughput(BBRMinPipeCwnd, BBRInitRTT) ),
             rt_prop_( RTpropFilterLen ),
+            pacing_gain_( 1 ),
+            cwnd_gain_( 1 ),
+            btl_bw_filter_( BtlBWFilterLen, btl_bw_ ), 
             rtprop_stamp_( CTimer::getTime() ),
             probe_rtt_done_stamp_( 0 ),
             probe_rtt_round_done_( false ),
@@ -63,10 +69,13 @@ class CBBR: public CCC
                 initFullPipe();
                 initPacingRate();
                 enterStartup();
+                fprintf(stderr, "bbr_init: rate: %f, cwnd: %f, btl_bw: %f, rt_prop: %ld\n"\
+                        , pacing_rate_, m_dCWndSize, btl_bw_, rt_prop_);
             }
 
         inline void initRoundCounting()
         {
+            cumu_delivered_ = 0;
             next_round_delivered_ = 0;
             round_start_ = false;
             round_count_ = 0;
@@ -81,7 +90,7 @@ class CBBR: public CCC
 
         inline void initPacingRate()
         {
-            pacing_rate_ = pacing_gain_ * getThroughput(2, 10000);
+            pacing_rate_ = pacing_gain_ * getThroughput(BBRMinPipeCwnd, BBRInitRTT);
         }
 
         virtual void onAck ( Block* block, const RateSample* rs ) override
@@ -98,7 +107,7 @@ class CBBR: public CCC
     protected:
         void updateModelAndState( Block* block, const RateSample* rs)
         {
-            updateBtlBw( rs );
+            updateBtlBw( block, rs );
             checkCyclePhase( rs );
             checkFullPipe( rs );
             checkDrain( rs );
@@ -106,9 +115,12 @@ class CBBR: public CCC
             checkProbeRTT( rs );
         }
 
-        void updateBtlBw( const RateSample* rs)
+        void updateBtlBw( Block* block, const RateSample* rs)
         {
-            updateRound( rs );
+            updateRound( block, rs );
+            // ratesample hasn't started yet
+            if ( rs->deliveryRate() == 0 )
+                return;
             if ( rs->deliveryRate() >= btl_bw_
                     || !rs->isAppLimited() ) {
                 btl_bw_ = btl_bw_filter_.update(
@@ -117,10 +129,10 @@ class CBBR: public CCC
             }
         }
 
-        void updateRound( const RateSample* rs)
+        void updateRound( Block* block, const RateSample* rs)
         {
             cumu_delivered_ = rs->cumuDelivered();
-            if (cumu_delivered_ >= next_round_delivered_) {
+            if (block->delivered_ >= next_round_delivered_) {
                 next_round_delivered_ = cumu_delivered_;
                 round_count_ += 1;
                 round_start_ = true;
@@ -254,6 +266,8 @@ class CBBR: public CCC
             m_dPktSndPeriod = (m_iMSS * 8.0) / pacing_rate_;
             // set cwnd
             setCwnd();
+            fprintf(stderr, "bbr_update: rate: %f, cwnd: %f, btl_bw: %f, rt_prop: %ld\n"\
+                    , pacing_rate_, m_dCWndSize, btl_bw_, rt_prop_);
         }
 
         void setPacingRateWithGain( double gain )
@@ -285,8 +299,6 @@ class CBBR: public CCC
 
         inline double getBDP(double gain)
         {
-            if ( rt_prop_ >= RTpropFilterLen )
-                return BBRMinPipeCwnd;
             double estimated_bdp = btl_bw_ * rt_prop_ / (8 * PacketMTU);
             return estimated_bdp * gain;
         }
@@ -333,18 +345,19 @@ class CBBR: public CCC
         static const uint64_t RTpropFilterLen   = 10000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
         static const int BBRMinPipeCwnd         = 4;
+        static const int BBRInitRTT             = 100000;
 
         static const int PacketMTU = 1500;
 
         // important states
         double PacingGainCycle[8]   = {1.25, 0.75, 1, 1, 1, 1, 1, 1};
         BBRState    state_; 
-        Filter      btl_bw_filter_;
         double       btl_bw_;            // unit: Mbps
         uint64_t     rt_prop_;           // unit: us
         double       pacing_gain_;
         double       cwnd_gain_;
         double       pacing_rate_;
+        Filter       btl_bw_filter_;
 
         // round related
         uint64_t    cumu_delivered_;

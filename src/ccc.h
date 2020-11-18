@@ -45,7 +45,7 @@ written by
 
 #include "udt.h"
 #include "packet.h"
-
+#include "ratesample.h"
 
 class UDT_API CCC
 {
@@ -89,6 +89,8 @@ public:
 
    virtual void onACK(int32_t) {}
 
+   virtual void onAck( Block* , const RateSample* ) {};
+
       // Functionality:
       //    Callback function to be called when a loss report is received.
       // Parameters:
@@ -117,6 +119,8 @@ public:
       //    None.
 
    virtual void onPktSent(const CPacket*) {}
+
+   virtual void onPktSent( Block* ) {}
 
       // Functionality:
       //    Callback function to be called when a data is received.

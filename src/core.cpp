@@ -53,6 +53,7 @@ written by
    #endif
 #endif
 #include <cmath>
+#include <cassert>
 #include <sstream>
 #include <stdexcept>
 #include "queue.h"
@@ -2101,6 +2102,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
            Block* block = m_pSndBuffer->readData( offset - 1, ack - 1 );
            m_pRateSample->onAck( block );
+           m_pCC->onAck( block, m_pRateSample );
 
            // record total time used for sending
            m_llSndDuration += currtime - m_llSndDurationCounter;
@@ -2268,11 +2270,17 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        CGuard::enterCS(m_AckLock);
        if (offset > 0)
        {
-           m_ullLastRspTime = currtime;     //reset timer
+           // only call onAck for m_pCC and m_pRateSample when new ack arrives
+           Block* block = m_pSndBuffer->readData( offset - 1, ack - 1 );
+           m_pRateSample->onAck( block );
+           m_pRateSample->setPacketLost( true );
+           m_pCC->onAck( block, m_pRateSample );
+
            m_iSndLastDataAck = ack;
            if (CSeqNo::seqcmp(m_iSndLastDataAck, m_iSndCurrSeqNo) > 0)
                m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
            m_pSndBuffer->ackData(offset);
+           m_ullLastRspTime = currtime;     //reset timer
        }
        m_pScoreBoard->update( ctrlpkt.getRcvAck(), sack_array );
        m_pScoreBoard->dumpBoard();
@@ -2435,7 +2443,6 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 int CUDT::packData(CPacket& packet, uint64_t& ts)
 {
    int payload = 0;
-   bool probe = false;
    bool is_retran = false;
 
    uint64_t entertime;
@@ -2517,10 +2524,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
             if (packet.m_iSeqNo > m_iSndHighSeqNo)
                 m_iSndHighSeqNo = packet.m_iSeqNo;
-
-            // every 16 (0xF) packets, a packet pair is sent
-            if (0 == (packet.m_iSeqNo & 0xF))
-               probe = true;
          }
          else
          {
@@ -2552,6 +2555,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    ++ m_llTraceSent;
    ++ m_llSentTotal;
 
+   /*
    if (probe)
    {
       // sends out probing packet pair
@@ -2575,6 +2579,9 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          }
       #endif
    }
+   */
+
+   ts = entertime + m_ullInterval;
 
    fprintf( stderr, "send_pkt, seq:%d, msg_id: %d gid: %d SndCumuAck: %d, SndCurrSeq: %d, is_retran: %d send_ts: %ld\n",
            packet.m_iSeqNo,
@@ -2896,7 +2903,7 @@ void CUDT::checkTimers()
    }
    */
    // temporarily set timeout to 400ms
-   next_exp_time = m_ullLastRspTime + 400000000;
+   next_exp_time = m_ullLastRspTime + 400000 * m_ullCPUFrequency;
 
    if (currtime > next_exp_time)
    {
@@ -2942,6 +2949,7 @@ void CUDT::checkTimers()
          */
 
          m_pCC->onTimeout();
+         m_pRateSample->onTimeout();
          CCUpdate();
 
          fprintf(stderr, "Timeout! RTO:%ld Timeout:%ld\n",

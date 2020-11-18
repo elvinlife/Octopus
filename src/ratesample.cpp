@@ -1,4 +1,5 @@
 #include "ratesample.h"
+#include "common.h"
 
 RateSample::RateSample()
     :prior_delivered_(0),
@@ -9,20 +10,22 @@ RateSample::RateSample()
     delivery_rate_(0),
     cumu_delivered_(0),
     cumu_delivered_ts_(CTimer::getTime()),
-    first_sent_ts_(0)
+    first_sent_ts_(0),
+    is_app_limited_(false),
+    packet_lost_(false),
+    pkts_in_flight_(0),
+    highest_seq_sent_(0),
+    highest_ack_(0)
 {}
 
 void RateSample::onAck(Block* block)
 {
     // should update all pkts in sack_area
-    /*
-    fprintf(stderr, "rs onack, seq: %d, delivered_: %lu, delivered_ts: %lu, fisrt_sent_ts: %lu\n",
-            block->seq_,
-            block->delivered_,
-            block->delivered_ts_,
-            block->first_sent_ts_);
-            */
-
+    if ( block->seq_+1 > highest_ack_ ) {
+        highest_ack_ = block->seq_ + 1;
+        pkts_in_flight_ = highest_seq_sent_ - highest_ack_ + 1;
+    }
+    setPacketLost( false );
     updateRateSample(block);
     if (prior_delivered_ts_ == 0)
         return;
@@ -40,10 +43,32 @@ void RateSample::onAck(Block* block)
 
 void RateSample::onPktSent(Block* block)
 {
+    if ( block->seq_ > highest_seq_sent_ ) {
+        highest_seq_sent_ = block->seq_;
+        pkts_in_flight_ = highest_seq_sent_ - highest_ack_ + 1;
+    }
     block->delivered_ = cumu_delivered_;
     block->delivered_ts_ = cumu_delivered_ts_;
     block->first_sent_ts_ = first_sent_ts_;
     block->sent_ts_ = CTimer::getTime();
+}
+
+void RateSample::onTimeout()
+{
+    prior_delivered_ = 0;
+    prior_delivered_ts_ = 0;
+    interval_ = 0;
+    ack_elapsed_ = 0;
+    send_elapsed_ = 0;
+    delivery_rate_ = 0;
+    cumu_delivered_ = 0;
+    cumu_delivered_ts_ = CTimer::getTime();
+    first_sent_ts_ = 0;
+    is_app_limited_ = false;
+    packet_lost_ = false;
+    pkts_in_flight_ = 0;
+    highest_seq_sent_ = 0;
+    highest_ack_ = 0;
 }
 
 void RateSample::updateRateSample(Block *block)

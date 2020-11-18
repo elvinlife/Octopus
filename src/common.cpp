@@ -147,6 +147,7 @@ uint64_t CTimer::readCPUFrequency()
 
       // CPU clocks per microsecond
       frequency = (t2 - t1) / 100000;
+      fprintf(stderr, "readcpufrequency: %ld\n", frequency);
    #elif defined(WIN32)
       int64_t ccf;
       if (QueryPerformanceFrequency((LARGE_INTEGER *)&ccf))
@@ -770,4 +771,20 @@ void CMD5::compute(const char* input, unsigned char result[16])
    md5_init(&state);
    md5_append(&state, (const md5_byte_t *)input, strlen(input));
    md5_finish(&state, result);
+}
+
+uint64_t get_init_time()
+{
+    timeval t;
+    gettimeofday(&t, 0);
+    static uint64_t init_ts = t.tv_sec * 1000000ULL + t.tv_usec;
+    return init_ts;
+}
+
+uint64_t get_current_time()
+{
+    timeval t;
+    gettimeofday(&t, 0);
+    return t.tv_sec * 1000000ULL + t.tv_usec -
+        get_init_time();
 }

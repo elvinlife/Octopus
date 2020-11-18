@@ -317,5 +317,7 @@ struct CMD5
    static void compute(const char* input, unsigned char result[16]);
 };
 
+uint64_t get_init_time();
+uint64_t get_current_time();
 
 #endif

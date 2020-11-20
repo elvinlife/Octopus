@@ -2068,11 +2068,11 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
            m_ullLastRspTime = currtime;
            int32_t ack = *(int32_t *)ctrlpkt.m_pcData;
 
-           fprintf(stderr, "recv_ack, ack: %d, SndLastDataAck: %d, SndCurrSeq: %d\n",
+           fprintf(stderr, "recv_ack, ack: %d, SndLastDataAck: %d, SndCurrSeq: %d, ts: %ldus\n",
                    ack,
                    m_iSndLastDataAck,
-                   m_iSndCurrSeqNo
-                   //CTimer::getTime() - m_StartTime,
+                   m_iSndCurrSeqNo,
+                   CTimer::getTime()
                    );
 
            // check the validation of the ack
@@ -2283,8 +2283,9 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
            m_ullLastRspTime = currtime;     //reset timer
        }
        m_pScoreBoard->update( ctrlpkt.getRcvAck(), sack_array );
+       fprintf( stderr, "recv_sack, " );
        m_pScoreBoard->dumpBoard();
-       fprintf(stderr, "\n");
+       fprintf( stderr, ", ts:%ld\n", CTimer::getTime() );
        CGuard::leaveCS(m_AckLock);
 
        // this will wake up the m_pSndUList from sleep (sleep results from no pkt/congestion)
@@ -2452,13 +2453,25 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    if ((0 != m_ullTargetTime) && (entertime > m_ullTargetTime))
       m_ullTimeDiff += entertime - m_ullTargetTime;
 
-   fprintf(stderr, "packData called, cwnd:%.2f, rwnd: %d, SndCumuAck: %d, SndCurrSeq: %d, SndHighSeq: %d, scb_next: %d\n", 
+   if (m_ullTimeDiff >= m_ullInterval)
+   {
+       ts = entertime;
+       m_ullTimeDiff -= m_ullInterval;
+   }
+   else
+   {
+       ts = entertime + m_ullInterval - m_ullTimeDiff;
+       m_ullTimeDiff = 0;
+   }
+
+   fprintf(stderr, "packData, cwnd:%.2f, rwnd: %d, SndCumuAck: %d, SndCurrSeq: %d, SndHighSeq: %d, scb_next: %d, ts: %ldus\n", 
            m_dCongestionWindow,
            m_iFlowWindowSize,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
            m_iSndHighSeqNo,
-           m_pScoreBoard->getNextRetran()
+           m_pScoreBoard->getNextRetran(),
+           CTimer::getTime()
            );
 
    // Loss retransmission always has higher priority.
@@ -2515,12 +2528,13 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
             m_iSndCurrSeqNo = CSeqNo::incseq(m_iSndCurrSeqNo);
             m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
 
-            m_pRateSample->onPktSent(block);
             packet.m_iSeqNo = m_iSndCurrSeqNo;
             packet.m_pcData = block->m_pcData;
             packet.m_iMsgNo = block->m_iMsgNo;
             packet.m_iExtra = block->m_iExtra;
             payload = block->m_iLength;
+
+            m_pRateSample->onPktSent(block, CTimer::getTime() + (ts - entertime) / m_ullCPUFrequency );
 
             if (packet.m_iSeqNo > m_iSndHighSeqNo)
                 m_iSndHighSeqNo = packet.m_iSeqNo;
@@ -2544,55 +2558,34 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    }
 
-   packet.m_iSendTs = int(CTimer::getTime() - m_StartTime);
    packet.m_iID = m_PeerID;
    packet.setLength(payload);
-
-   m_pCC->onPktSent(&packet);
-   //m_pSndTimeWindow->onPktSent(packet.m_iTimeStamp);
 
 
    ++ m_llTraceSent;
    ++ m_llSentTotal;
 
+   m_pCC->onPktSent(&packet);
+
    /*
-   if (probe)
-   {
-      // sends out probing packet pair
-      ts = entertime;
-      probe = false;
+   if (m_ullTargetTime == 0 ||
+           m_ullTargetTime + m_ullInterval <= entertime) {
+       ts = entertime;
    }
-   else
-   {
-      #ifndef NO_BUSY_WAITING
-         ts = entertime + m_ullInterval;
-      #else
-         if (m_ullTimeDiff >= m_ullInterval)
-         {
-            ts = entertime;
-            m_ullTimeDiff -= m_ullInterval;
-         }
-         else
-         {
-            ts = entertime + m_ullInterval - m_ullTimeDiff;
-            m_ullTimeDiff = 0;
-         }
-      #endif
+   else {
+       ts = m_ullTargetTime + m_ullInterval;
    }
    */
 
-   ts = entertime + m_ullInterval;
-
-   fprintf( stderr, "send_pkt, seq:%d, msg_id: %d gid: %d SndCumuAck: %d, SndCurrSeq: %d, is_retran: %d send_ts: %ld\n",
+   fprintf( stderr, "send_pkt seq:%d, msg_id: %d size: %d gid: %d SndCumuAck: %d SndCurrSeq: %d is_retran: %d send_ts: %ldus\n",
            packet.m_iSeqNo,
            packet.getMsgSeq(),
+           packet.getLength() + 20,
            packet.getMsgGroupId(),
-           //packet.m_iExtra,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
            (is_retran ? 1 : 0),
-           ts
-           );
+           CTimer::getTime() + (uint64_t) (m_ullInterval / m_ullCPUFrequency));
 
    m_ullTargetTime = ts;
 

@@ -332,7 +332,6 @@ private: // Status
 
 private: // Sending related data
    CSndBuffer* m_pSndBuffer;                    // Sender buffer
-   //CSndLossList* m_pSndLossList;                // Sender loss list
    ScoreBoard* m_pScoreBoard;                   // Sender scoreboard(loss list)
    RateSample* m_pRateSample;                   // Sender rate sample
    CPktTimeWindow* m_pSndTimeWindow;            // Packet sending time window

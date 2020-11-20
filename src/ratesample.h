@@ -25,12 +25,13 @@ class RateSample
     int     highest_seq_sent_;
     int     highest_ack_;
 
+    static  const int PacketMTU = 1500;
     void updateRateSample(Block* block);
 
 public:
     RateSample();
     void onAck(Block* block);
-    void onPktSent(Block* block);
+    void onPktSent(Block* block, uint64_t send_ts);
     void onTimeout();
 
     float   deliveryRate() const { return delivery_rate_; }

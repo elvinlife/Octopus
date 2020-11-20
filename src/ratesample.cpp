@@ -27,18 +27,10 @@ void RateSample::onAck(Block* block)
     }
     setPacketLost( false );
     updateRateSample(block);
-    /*
-    fprintf(stderr, "on_ack, send_elapse: %ld, ack_elapse: %ld, cumu_deliver: %ld,\
-            prior_deliver: %ld prior_deliver_ts: %ld\n", 
-            send_elapsed_, 
-            ack_elapsed_,
-            cumu_delivered_,
-            prior_delivered_,
-            prior_delivered_ts_);
-            */
     if (prior_delivered_ts_ == 0)
         return;
     interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;
+    //interval_ = ack_elapsed_;
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ * 8;
@@ -50,7 +42,7 @@ void RateSample::onAck(Block* block)
     }
 }
 
-void RateSample::onPktSent(Block* block)
+void RateSample::onPktSent(Block* block, uint64_t send_ts)
 {
     if ( block->seq_ > highest_seq_sent_ ) {
         highest_seq_sent_ = block->seq_;
@@ -59,7 +51,7 @@ void RateSample::onPktSent(Block* block)
     block->delivered_ = cumu_delivered_;
     block->delivered_ts_ = cumu_delivered_ts_;
     block->first_sent_ts_ = first_sent_ts_;
-    block->sent_ts_ = CTimer::getTime();
+    block->sent_ts_ = send_ts; 
 }
 
 void RateSample::onTimeout()
@@ -84,7 +76,8 @@ void RateSample::updateRateSample(Block *block)
 {
     if (block->delivered_ts_ == 0)
         return;
-    cumu_delivered_ += (block->m_iLength + 20);
+    //cumu_delivered_ += (block->m_iLength + 20);
+    cumu_delivered_ += PacketMTU;
     cumu_delivered_ts_ = CTimer::getTime();
     if (block->delivered_ > prior_delivered_) {
         prior_delivered_ = block->delivered_;

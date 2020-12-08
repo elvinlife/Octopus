@@ -38,7 +38,8 @@ void RateSample::onAck(Block* block)
                 delivery_rate_, 
                 sample_delivered,
                 send_elapsed_ / 1000, 
-                ack_elapsed_ / 1000);
+                ack_elapsed_ / 1000,
+                );
     }
 }
 
@@ -79,7 +80,7 @@ void RateSample::updateRateSample(Block *block)
     //cumu_delivered_ += (block->m_iLength + 20);
     cumu_delivered_ += PacketMTU;
     cumu_delivered_ts_ = CTimer::getTime();
-    if (block->delivered_ > prior_delivered_) {
+    if (block->delivered_ >= prior_delivered_) {
         prior_delivered_ = block->delivered_;
         prior_delivered_ts_ = block->delivered_ts_;
         send_elapsed_ = block->sent_ts_ - block->first_sent_ts_;

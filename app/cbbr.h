@@ -1,4 +1,5 @@
-#include <udt.h>#include <ccc.h>
+#include <udt.h>
+#include <ccc.h>
 #include <cstdio>
 #include "common.h"
 
@@ -30,16 +31,20 @@ struct Filter
     {
         double max = -1;
         // reset those skipped rounds
-        for (int i = last_round_ + 1; i < round; ++i)
-            value_array_[ i % window_len_ ] = -1;
-
+        if (round < last_round_)
+            goto exit;
+        // clear the outdated data
+        if (first_round_ <= round - window_len_ ) {
+            for (int j = first_round_; j <= round - window_len_; ++j) {
+                value_array_[ j % window_len_ ] = -1;
+            }
+            first_round_ = last_round_ - window_len_ + 1;
+        }
         if ( value > value_array_[ round % window_len_ ] ) {
             value_array_[ round % window_len_ ] = value;
         }
-
         last_round_ = round;
-        if (first_round_ + window_len_ <= last_round_)
-            first_round_ = last_round_ - window_len_ + 1;
+exit:
         for (int i = first_round_; i <= last_round_; ++i)
             if (max < value_array_[i % window_len_])
                 max = value_array_[i % window_len_];
@@ -263,8 +268,15 @@ class CBBR: public CCC
             m_dPktSndPeriod = (PacketMTU * 8.0) / pacing_rate_;
             // set cwnd
             setCwnd();
-            fprintf(stderr, "bbr_status: rate: %f, cwnd: %f, btl_bw: %f, rt_prop: %ld, pacing_gain_: %f\n"\
-                    , pacing_rate_, m_dCWndSize, btl_bw_, rt_prop_, pacing_gain_);
+            fprintf(stderr, "bbr_status: rate: %f, cwnd: %f, btl_bw: %f, rt_prop: %ld, pacing_gain_: %f cwnd_gain: %.2f ts: %ldms\n",
+                    pacing_rate_,
+                    m_dCWndSize,
+                    btl_bw_,
+                    rt_prop_,
+                    pacing_gain_,
+                    cwnd_gain_,
+                    CTimer::getTime() / 1000
+                    );
         }
 
         void setPacingRateWithGain( double gain )
@@ -326,7 +338,7 @@ class CBBR: public CCC
             fprintf(stderr, "enterProbeBW\n");
             state_ = ProbeBW;
             pacing_gain_ = 1;
-            cwnd_gain_ = 1;
+            cwnd_gain_ = 2;
             cycle_index_ = BBRGainCycleLen - 1;
             advanceCyclePhase();
         }

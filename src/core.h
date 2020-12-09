@@ -397,6 +397,7 @@ private: // synchronization: mutexes and conditions
 private: // Generation and processing of packets
    void sendCtrl(int pkttype, void* lparam = NULL, void* rparam = NULL, int size = 0);
    void processCtrl(CPacket& ctrlpkt);
+   void checkAppLimited();
    int packData(CPacket& packet, uint64_t& ts);
    int processData(CUnit* unit);
    int listen(sockaddr* addr, CPacket& packet);

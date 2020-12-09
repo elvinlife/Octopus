@@ -312,34 +312,6 @@ Block* CSndBuffer::readData( const int offset, int seq )
    return p;
 }
 
-/*
-int CSndBuffer::readData( Block* block, const int offset )
-{
-    Block* to_read = NULL;
-    if (offset == 0) {
-        if (m_pCurrBlock == m_pLastBlock)
-            return 0;
-        to_read = m_pCurrBlock;
-        goto copy;
-    }
-    else {
-        CGuard bufferguard(m_BufLock);
-        to_read = m_pFirstBlock;
-        for (int i = 0; i < offset; ++ i) {
-            to_read = to_read->m_pNext;
-            if (!to_read)
-                return -1;
-        }
-    }
-copy:
-
-    block->m_pcData     = to_read->m_pcData;
-    block->m_iLength    = to_read->m_iLength;
-    block->m_iMsgNo     = to_read->m_iMsgNo;
-    block->m_iExtra     = to_read->m_iExtra;
-    return block->m_iLength;
-}
-*/
 
 void CSndBuffer::ackData(int offset)
 {

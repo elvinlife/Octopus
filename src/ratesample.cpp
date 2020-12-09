@@ -38,7 +38,7 @@ void RateSample::onAck(Block* block)
                 delivery_rate_, 
                 sample_delivered,
                 send_elapsed_ / 1000, 
-                ack_elapsed_ / 1000,
+                ack_elapsed_ / 1000
                 );
     }
 }

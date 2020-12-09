@@ -1324,6 +1324,8 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, int8_t pri
    if (0 == m_pSndBuffer->getCurrBufSize())
       m_llSndDurationCounter = CTimer::getTime();
 
+   checkAppLimited();
+
    // insert the user buffer into the sening list
    m_pSndBuffer->addBuffer(data, len, msttl, inorder, priority, gid);
 
@@ -2441,6 +2443,17 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
    }
 }
 
+void CUDT::checkAppLimited()
+{
+    int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
+    if ( m_pSndBuffer->isEmpty() &&
+            cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo)) ) {
+        m_pRateSample->setAppLimited( true );
+    }
+    else
+        m_pRateSample->setAppLimited( false );
+}
+
 int CUDT::packData(CPacket& packet, uint64_t& ts)
 {
    int payload = 0;
@@ -2575,7 +2588,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
            (is_retran ? 1 : 0),
-           (CTimer::getTime() +  (ts - entertime) / m_ullCPUFrequency) / 1000,
+           (CTimer::getTime() +  (ts - entertime) / m_ullCPUFrequency) / 1000
            );
 
    m_ullTargetTime = ts;

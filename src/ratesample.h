@@ -35,13 +35,21 @@ public:
     void onTimeout();
 
     float   deliveryRate() const { return delivery_rate_; }
+
     int64_t cumuDelivered() const { return cumu_delivered_; }
+
     bool    isAppLimited() const { return is_app_limited_; }
+
     int64_t pktsInFlight() const { return pkts_in_flight_; }
+
     bool    packetLost() const { return packet_lost_; }
 
     void setPacketLost(bool lost) {
         packet_lost_ = lost;
+    }
+
+    void setAppLimited(bool limited) {
+        is_app_limited_ = limited;
     }
 };
 

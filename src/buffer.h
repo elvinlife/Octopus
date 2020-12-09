@@ -116,10 +116,27 @@ public:
 
    int readData(char** data, const int offset, int32_t& msgno, int& msglen);
 
+   // Functionality:
+   // Read the next packet data block
+   // Returned value:
+   //  The packet data block
 
    Block* readCurrData();
+
+   // Functionality:
+   // Read the packet data block [offset] after the cumu.ACK point 
+   // Parameters:
+   //   0) [in] offset: offset from the cumu.ACK point
+   //   1) [in] seq: to verify we read the correct block.
+   // Returned value:
+   //   The packet data block
+
    Block* readData( const int offset, int seq );
-   //int readData(Block* block, const int offset = 0);
+
+   // Functionality:
+   // Check whether the send buffer is empty or not
+
+   bool isEmpty() { return m_pCurrBlock == m_pLastBlock; }
 
       // Functionality:
       //    Update the ACK point and may release/unmap/return the user data according to the flag.

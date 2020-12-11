@@ -38,7 +38,7 @@ endif
 
 DIR = $(shell pwd)
 
-APP = appserver appclient sendfile recvfile test
+APP = appserver appclient sendfile recvfile test svcclient svcserver
 
 all: $(APP)
 
@@ -54,6 +54,10 @@ sendfile: sendfile.o
 recvfile: recvfile.o
 	$(C++) $^ -o $@ $(LDFLAGS)
 test: test.o
+	$(C++) $^ -o $@ $(LDFLAGS)
+svcclient: svcclient.o
+	$(C++) $^ -o $@ $(LDFLAGS)
+svcserver: svcserver.o
 	$(C++) $^ -o $@ $(LDFLAGS)
 
 clean:

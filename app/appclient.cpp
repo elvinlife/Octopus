@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
    for (int i = 0; i < 1000000; i ++)
    {
        int ss;
-       if (UDT::ERROR == (ss = UDT::sendmsg(client, data, size, (1<<20), 1, 0, (uint32_t)i)))
+       if (UDT::ERROR == (ss = UDT::sendmsg(client, data, size, (1<<20), 1, (uint32_t)i)))
        {
            cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
            break;
@@ -128,11 +128,11 @@ void* monitor(void* s)
 DWORD WINAPI monitor(LPVOID s)
 #endif
 {
+   /*
    UDTSOCKET u = *(UDTSOCKET*)s;
 
    UDT::TRACEINFO perf;
 
-   /*
    cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
 
    while (true)

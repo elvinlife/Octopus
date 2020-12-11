@@ -66,6 +66,7 @@ public:
    int32_t& m_iExtra;                   // alias: Extra field
    int32_t& m_iID;                      // alias: socket ID
    int32_t& m_iUId;                     // alias: unique pkt number 
+   uint32_t m_nHeader[5];               // The 128-bit header field
    char*& m_pcData;                     // alias: data/control information
 
    static const int m_iPktHdrSize;	// packet header size
@@ -192,7 +193,7 @@ public:
    CPacket* clone() const;
 
 protected:
-   uint32_t m_nHeader[5];               // The 128-bit header field
+   //uint32_t m_nHeader[5];               // The 128-bit header field
    iovec m_PacketVector[2];             // The 2-demension vector of UDT packet [header, data]
 
    int32_t __pad;

@@ -119,7 +119,7 @@ CSndBuffer::~CSndBuffer()
    #endif
 }
 
-void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, int8_t priority, int32_t gid)
+void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint32_t extra_field)
 {
    int size = len / m_iMSS;
    if ((len % m_iMSS) != 0)
@@ -143,15 +143,7 @@ void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, int8_
       memcpy(s->m_pcData, data + i * m_iMSS, pktlen);
       s->m_iLength = pktlen;
 
-      // 0-7: priority
-      // 8: enable_g
-      // 16-32: gid
-      s->m_iExtra = priority;
-      s->m_iExtra = s->m_iExtra << 24;
-      if (gid != -1) {
-          s->m_iExtra |= 0x00800000;
-          s->m_iExtra |= ((uint32_t)gid & 0x0000ffff);
-      }
+      s->m_iExtra = extra_field;
       //fprintf(stderr, "addBuffer, m_iExtra: %x, priority: %x, msgno: %x\n", s->m_iExtra, priority, m_iNextMsgNo );
 
       s->m_iMsgNo = m_iNextMsgNo | inorder;
@@ -554,12 +546,14 @@ int CRcvBuffer::readMsg(char* data, int len)
    while (p != (q + 1) % m_iSize)
    {
       int unitsize = m_pUnit[p]->m_Packet.getLength();
+      int headersize = CPacket::m_iPktHdrSize;
       if ((rs >= 0) && (unitsize > rs))
          unitsize = rs;
 
       if (unitsize > 0)
       {
-         memcpy(data, m_pUnit[p]->m_Packet.m_pcData, unitsize);
+         memcpy(data, m_pUnit[p]->m_Packet.m_nHeader, headersize); 
+         memcpy(data + headersize, m_pUnit[p]->m_Packet.m_pcData, unitsize);
          data += unitsize;
          rs -= unitsize;
       }

@@ -1236,7 +1236,7 @@ int CUDT::recv(char* data, int len)
    return res;
 }
 
-int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, int8_t priority, int32_t gid)
+int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t extra_field)
 {
    if (UDT_STREAM == m_iSockType)
       throw CUDTException(5, 9, 0);
@@ -1327,7 +1327,7 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, int8_t pri
    checkAppLimited();
 
    // insert the user buffer into the sening list
-   m_pSndBuffer->addBuffer(data, len, msttl, inorder, priority, gid);
+   m_pSndBuffer->addBuffer(data, len, msttl, inorder, extra_field);
 
    // insert this socket to the snd list if it is not on the list yet
    m_pSndQueue->m_pSndUList->update(this, false);
@@ -2498,9 +2498,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       if (offset < 0)
          return 0;
 
-      int msglen;
-
-      //payload = m_pSndBuffer->readData(&(packet.m_pcData), offset, packet.m_iMsgNo, msglen);
       if (CSeqNo::seqcmp( packet.m_iSeqNo, m_iSndHighSeqNo ) > 0 )
           throw std::runtime_error("resend seq bigger than SndHighSeqNo!\n");
 
@@ -2580,7 +2577,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stdout, "send_pkt seq:%d, msg_id: %d size: %d gid: %d SndCumuAck: %d SndCurrSeq: %d is_retran: %d send_ts: %ldms\n",
+   fprintf( stderr, "send_pkt seq:%d, msg_id: %d size: %d gid: %d SndCumuAck: %d SndCurrSeq: %d is_retran: %d send_ts: %ldms\n",
            packet.m_iSeqNo,
            packet.getMsgSeq(),
            packet.getLength() + 20,

@@ -52,11 +52,13 @@ struct Block
     char* m_pcData;                   // pointer to the data block
     int m_iLength;                    // length of the block
 
+    // msg related information
     int32_t m_iMsgNo;                 // message number
     uint32_t m_iExtra;
     uint64_t m_OriginTime;            // original request time
     int m_iTTL;                       // time to live (milliseconds)
 
+    // for ratesample
     int seq_;
     uint64_t delivered_;
     uint64_t delivered_ts_;
@@ -82,7 +84,7 @@ public:
       // Returned value:
       //    None.
 
-   void addBuffer(const char* data, int len, int ttl = -1, bool order = false, int8_t priority = 0, int32_t gid = 0);
+   void addBuffer(const char* data, int len, int ttl = -1, bool order = false, uint32_t extra_field = 0);
 
       // Functionality:
       //    Read a block of data from file and insert it into the sending list.

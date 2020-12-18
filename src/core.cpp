@@ -58,6 +58,7 @@ written by
 #include <stdexcept>
 #include "queue.h"
 #include "core.h"
+#include <string>
 
 using namespace std;
 
@@ -2266,7 +2267,6 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
    {
        int32_t ack = ctrlpkt.getRcvAck();
        int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
-       //int32_t sack_num = sack_array[0];
 
        int offset = CSeqNo::seqoff(m_iSndLastDataAck, ack);
        // protect packet retransmission
@@ -2461,6 +2461,7 @@ void CUDT::checkPktForward()
         block = m_pSndBuffer->readData( offset, seq ); 
         if ( !block->is_reliable() ) {
             m_pScoreBoard->markRetran( seq );
+            m_pScoreBoard->update( seq );
             m_pRateSample->onAck( block, false );
             m_iSndForward = seq + 1;
         }
@@ -2468,6 +2469,7 @@ void CUDT::checkPktForward()
             break;
     }
     if (m_iSndLastDataAck < m_iSndForward) {
+        fprintf( stderr, "forward_ack: %d->%d\n", m_iSndLastDataAck, m_iSndForward );
         m_pSndBuffer->ackData( CSeqNo::seqoff( m_iSndLastDataAck, m_iSndForward ) );
         m_iSndLastDataAck = m_iSndForward;
         m_ullLastRspTime = currtime;     //reset RTO timer
@@ -2518,7 +2520,8 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            CTimer::getTime()
            );
            */
-   string send_pkt = "send_pkt";
+
+   string send_pkt("send_pkt");
 
    // Loss retransmission always has higher priority.
    if ((packet.m_iSeqNo = m_pScoreBoard->getNextRetran()) >= 0)
@@ -2545,7 +2548,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       is_retran = true;
       ++ m_iTraceRetrans;
       ++ m_iRetransTotal;
-      send_pkt = "resend_pkt";
+      send_pkt = string("resend_pkt");
    }
    else
    {
@@ -2558,7 +2561,9 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          Block* block = NULL;
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
             block = m_pSndBuffer->readCurrData();
-            block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
+            if (block) {
+                block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
+            }
          }
          else {
             block = m_pSndBuffer->readData( 
@@ -2572,7 +2577,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
             m_iSndCurrSeqNo = CSeqNo::incseq(m_iSndCurrSeqNo);
             m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
 
-            packet.m_iSeqNo = m_iSndCurrSeqNo;
+            packet.m_iSeqNo = block->seq_;
             packet.m_pcData = block->m_pcData;
             packet.m_iMsgNo = block->m_iMsgNo;
             packet.m_iExtra = block->m_iExtra;

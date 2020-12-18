@@ -621,6 +621,7 @@ void CUDT::connect(const sockaddr* serv_addr)
    m_iLastDecSeq = m_iISN - 1;
    m_iSndLastAck = m_iISN;
    m_iSndLastDataAck = m_iISN;
+   m_iSndForward = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
    m_iSndHighSeqNo = m_iISN - 1;
    //m_iSndLastAck2 = m_iISN;
@@ -866,6 +867,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    m_iLastDecSeq = m_iISN - 1;
    m_iSndLastAck = m_iISN;
    m_iSndLastDataAck = m_iISN;
+   m_iSndForward = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
    m_iSndHighSeqNo = m_iISN - 1;
    //m_iSndLastAck2 = m_iISN;
@@ -2103,7 +2105,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
                m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
 
            Block* block = m_pSndBuffer->readData( offset - 1, ack - 1 );
-           m_pRateSample->onAck( block );
+           m_pRateSample->onAck( block, true );
            m_pCC->onAck( block, m_pRateSample );
 
            // record total time used for sending
@@ -2111,14 +2113,13 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
            m_llSndDurationTotal += currtime - m_llSndDurationCounter;
            m_llSndDurationCounter = currtime;
 
-           // protect packet retransmission
-           CGuard::enterCS(m_AckLock);
            // acknowledge the sending buffer
            m_pSndBuffer->ackData(offset);
-           // update sending variables
+
+           // protect scoreboard 
+           CGuard::enterCS(m_AckLock);
            m_pScoreBoard->update( ack, NULL );
-           //m_pScoreBoard->dumpBoard();
-           //fprintf(stderr, "\n");
+           checkPktForward();
            CGuard::leaveCS(m_AckLock);
 
            pthread_mutex_lock(&m_SendBlockLock);
@@ -2261,7 +2262,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
       }
    *//*}}}*/
 
-       case 3: //011 - Loss Report
+       case 3: //011 - SACK
    {
        int32_t ack = ctrlpkt.getRcvAck();
        int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
@@ -2269,12 +2270,12 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
        int offset = CSeqNo::seqoff(m_iSndLastDataAck, ack);
        // protect packet retransmission
-       CGuard::enterCS(m_AckLock);
+
        if (offset > 0)
        {
            // only call onAck for m_pCC and m_pRateSample when new ack arrives
            Block* block = m_pSndBuffer->readData( offset - 1, ack - 1 );
-           m_pRateSample->onAck( block );
+           m_pRateSample->onAck( block, true );
            m_pRateSample->setPacketLost( true );
            m_pCC->onAck( block, m_pRateSample );
 
@@ -2282,12 +2283,15 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
            if (CSeqNo::seqcmp(m_iSndLastDataAck, m_iSndCurrSeqNo) > 0)
                m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
            m_pSndBuffer->ackData(offset);
-           m_ullLastRspTime = currtime;     //reset timer
+           m_ullLastRspTime = currtime;     //reset RTO timer
        }
+
+       CGuard::enterCS(m_AckLock);
        m_pScoreBoard->update( ctrlpkt.getRcvAck(), sack_array );
        fprintf( stderr, "recv_sack, " );
        m_pScoreBoard->dumpBoard();
        fprintf( stderr, ", ts:%ld\n", CTimer::getTime() );
+       checkPktForward();
        CGuard::leaveCS(m_AckLock);
 
        // this will wake up the m_pSndUList from sleep (sleep results from no pkt/congestion)
@@ -2443,6 +2447,33 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
    }
 }
 
+void CUDT::checkPktForward()
+{
+    uint64_t currtime;
+    CTimer::rdtsc(currtime);
+    if (m_pScoreBoard->empty())
+        return;
+    int seq = -1, offset;
+    Block* block;
+    while( -1 != (seq = m_pScoreBoard->getNextRetran()) ) {
+        offset = CSeqNo::seqoff( m_iSndLastDataAck, seq ); 
+        assert (offset >= 0);
+        block = m_pSndBuffer->readData( offset, seq ); 
+        if ( !block->is_reliable() ) {
+            m_pScoreBoard->markRetran( seq );
+            m_pRateSample->onAck( block, false );
+            m_iSndForward = seq + 1;
+        }
+        else
+            break;
+    }
+    if (m_iSndLastDataAck < m_iSndForward) {
+        m_pSndBuffer->ackData( CSeqNo::seqoff( m_iSndLastDataAck, m_iSndForward ) );
+        m_iSndLastDataAck = m_iSndForward;
+        m_ullLastRspTime = currtime;     //reset RTO timer
+    }
+}
+
 void CUDT::checkAppLimited()
 {
     int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
@@ -2487,6 +2518,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            CTimer::getTime()
            );
            */
+   string send_pkt = "send_pkt";
 
    // Loss retransmission always has higher priority.
    if ((packet.m_iSeqNo = m_pScoreBoard->getNextRetran()) >= 0)
@@ -2506,12 +2538,14 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       packet.m_pcData = block->m_pcData;
       packet.m_iMsgNo = block->m_iMsgNo;
       packet.m_iExtra = block->m_iExtra;
+      packet.m_iForward = m_iSndForward;
       payload = block->m_iLength;
 
       m_pScoreBoard->markRetran( packet.m_iSeqNo );
       is_retran = true;
       ++ m_iTraceRetrans;
       ++ m_iRetransTotal;
+      send_pkt = "resend_pkt";
    }
    else
    {
@@ -2542,6 +2576,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
             packet.m_pcData = block->m_pcData;
             packet.m_iMsgNo = block->m_iMsgNo;
             packet.m_iExtra = block->m_iExtra;
+            packet.m_iForward = m_iSndForward;
             payload = block->m_iLength;
 
             m_pRateSample->onPktSent(block, CTimer::getTime() + (ts - entertime) / m_ullCPUFrequency );
@@ -2577,11 +2612,12 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stderr, "send_pkt seq:%d, msg_id: %d size: %d gid: %d SndCumuAck: %d SndCurrSeq: %d is_retran: %d send_ts: %ldms\n",
+   fprintf( stderr, "%s seq:%d msg_id: %x wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d is_retran: %d send_ts: %ldms\n",
+           send_pkt.c_str(),
            packet.m_iSeqNo,
-           packet.getMsgSeq(),
+           packet.m_nHeader[1],
+           packet.m_nHeader[2],
            packet.getLength() + 20,
-           packet.getMsgGroupId(),
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
            (is_retran ? 1 : 0),
@@ -2593,32 +2629,32 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    return payload;
 }
 
-void CUDT::updateRcvWnd(CPacket& pkt)
+void CUDT::updateRcvWnd( int32_t seq )
 {
-    while( pkt.m_iSeqNo + 1 - m_iRcvCurrSeqNo >= (m_iRcvWndSize - 1) ) {
+    while( seq + 1 - m_iRcvCurrSeqNo >= (m_iRcvWndSize - 1) ) {
         throw std::runtime_error("Recv window overflow!\n");
     }
     // duplicate pkt
-    if ( pkt.m_iSeqNo <= m_iRcvCurrSeqNo ) {
+    if ( seq <= m_iRcvCurrSeqNo ) {
         return;
     }
-    if ( pkt.m_iSeqNo > m_iRcvCurrSeqNo &&
-            pkt.m_iSeqNo < m_iRcvHighSeqNo &&
-            m_pRcvSeen[ pkt.m_iSeqNo & m_iRcvWndMask ] ) {
+    if ( seq > m_iRcvCurrSeqNo &&
+            seq < m_iRcvHighSeqNo &&
+            m_pRcvSeen[ seq & m_iRcvWndMask ] ) {
         return;
     }
     // pkt.seq is gt max_seen
-    if ( pkt.m_iSeqNo > m_iRcvHighSeqNo ) {
-        for( int i = m_iRcvHighSeqNo + 1; i < pkt.m_iSeqNo; ++i ) {
+    if ( seq > m_iRcvHighSeqNo ) {
+        for( int i = m_iRcvHighSeqNo + 1; i < seq; ++i ) {
             m_pRcvSeen[ i & m_iRcvWndMask ] = 0;
         }
-        m_iRcvHighSeqNo = pkt.m_iSeqNo;
-        m_pRcvSeen[ m_iRcvHighSeqNo & m_iRcvWndMask ] = sizeof(pkt);
+        m_iRcvHighSeqNo = seq;
+        m_pRcvSeen[ m_iRcvHighSeqNo & m_iRcvWndMask ] = 1;
         m_pRcvSeen[ (m_iRcvHighSeqNo + 1) & m_iRcvWndMask ] = 0;
     }
     int recvCurrSeq = m_iRcvCurrSeqNo;
-    if ( pkt.m_iSeqNo > m_iRcvCurrSeqNo ) {
-        m_pRcvSeen[ pkt.m_iSeqNo & m_iRcvWndMask ] = sizeof(pkt);
+    if ( seq > m_iRcvCurrSeqNo ) {
+        m_pRcvSeen[ seq & m_iRcvWndMask ] = 1;
         while( m_pRcvSeen[ (recvCurrSeq + 1) & m_iRcvWndMask ] != 0 ) {
             recvCurrSeq += 1;
         }
@@ -2684,7 +2720,7 @@ int CUDT::processData(CUnit* unit)
 
    // 1. update recv window to get correct ack
    // 2. save the data unit in recv_buffer
-   updateRcvWnd(packet);
+   updateRcvWnd(packet.m_iSeqNo);
    int32_t offset = CSeqNo::seqoff(m_iRcvLastAck, packet.m_iSeqNo);
    if ( offset >= m_pRcvBuffer->getAvailBufSize() ) {
        char error_str[100];
@@ -2694,6 +2730,14 @@ int CUDT::processData(CUnit* unit)
    }
    if (m_pRcvBuffer->addData(unit, offset) < 0) {
        fprintf( stderr, "duplicate pkt\n" );
+   }
+
+   // forward the cumu.ack
+   offset  = CSeqNo::seqoff(m_iRcvCurrSeqNo, packet.m_iForward);
+   if ( offset > 1 ) {
+       for ( int32_t seq = m_iRcvCurrSeqNo + 1; seq < packet.m_iForward; ++seq ) {
+           updateRcvWnd( seq );
+       }
    }
 
    // ack anyway
@@ -2903,7 +2947,8 @@ void CUDT::checkTimers()
    {
       // Haven't receive any information from the peer, is it dead?!
       // timeout: at least 16 expirations and must be greater than 10 seconds
-      if ((m_iEXPCount > 16) && (currtime - m_ullLastRspTime > 5000000 * m_ullCPUFrequency))
+      //if ((m_iEXPCount > 16) && (currtime - m_ullLastRspTime > 3000000 * m_ullCPUFrequency))
+      if ( m_iEXPCount > 16 )
       {
          //
          // Connection is broken. 
@@ -2954,10 +2999,6 @@ void CUDT::checkTimers()
 
          // immediately restart transmission
          m_pSndQueue->m_pSndUList->update(this);
-      }
-      else
-      {
-         sendCtrl(1);
       }
 
       ++ m_iEXPCount;

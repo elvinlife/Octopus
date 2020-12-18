@@ -5,6 +5,7 @@
 
 class RateSample
 {
+private:
     // rate sample related info 
     uint64_t prior_delivered_;
     uint64_t prior_delivered_ts_;
@@ -26,11 +27,11 @@ class RateSample
     int     highest_ack_;
 
     static  const int PacketMTU = 1500;
-    void updateRateSample(Block* block);
+    void updateRateSample(Block* block, bool real_ack);
 
 public:
     RateSample();
-    void onAck(Block* block);
+    void onAck(Block* block, bool real_ack);
     void onPktSent(Block* block, uint64_t send_ts);
     void onTimeout();
 

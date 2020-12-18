@@ -307,7 +307,7 @@ int32_t ReassemblyQueue::nextHole( int32_t seq )
     return -1;
 }
 
-void ReassemblyQueue::dumpList()
+void ReassemblyQueue::dumpList() const
 {
     seginfo* p;
     for (p = head_; p; p = p->next_) {
@@ -369,7 +369,7 @@ void ScoreBoard::markRetran( int32_t retran_seq ) {
         seq_next_ = retran_seq + 1;
 }
 
-void ScoreBoard::dumpBoard() {
+void ScoreBoard::dumpBoard() const{
     fprintf(stderr, "ack: %d, seq_next: %d, sack_high: %d, segs:",
             ack_cumu_,
             seq_next_,

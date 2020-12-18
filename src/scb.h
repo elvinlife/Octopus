@@ -30,12 +30,12 @@ class ReassemblyQueue
         
         ~ReassemblyQueue();
 
-        int empty() {return head_ == NULL; }
+        int empty() const {return head_ == NULL; }
         void add( int32_t start, int32_t end );
         void clearto( int32_t seq );
         void clear();
         int32_t nextHole( int32_t seq );
-        void dumpList();
+        void dumpList() const;
 
         int total_;         // # of pkts sacked in rq
         int32_t& rcv_next_; // current cumulative ack, updated by the insertion of new sack areas
@@ -60,8 +60,9 @@ public:
     int32_t getNextRetran();
     int update(int32_t ack, int32_t *sack_array);
     void markRetran(int32_t retran_seq);
-    void dumpBoard();
+    void dumpBoard() const;
     void clear();
+    bool empty() const { return rq_.empty(); }
 
 private:
     int32_t ack_cumu_;  // current cumulative ack

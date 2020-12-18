@@ -269,6 +269,7 @@ private:
 
    void sample(CPerfMon* perf, bool clear = true);
 
+
 private:
    static CUDTUnited s_UDTUnited;               // UDT global management base
 
@@ -345,6 +346,7 @@ private: // Sending related data
 
    volatile int32_t m_iSndLastAck;              // Last ACK received
    volatile int32_t m_iSndLastDataAck;          // The real last ACK that updates the sender buffer and loss list
+   volatile int32_t m_iSndForward;              // The next seq the receiver should expect, all previous pkts are acked/abandoned 
    volatile int32_t m_iSndHighSeqNo;            // The largest sequence number that has been sent (won't change after timeout)
    volatile int32_t m_iSndCurrSeqNo;            // The last seq that has been sent              
    int32_t m_iLastDecSeq;                       // Sequence number sent last decrease occurs
@@ -399,11 +401,12 @@ private: // Generation and processing of packets
    void sendCtrl(int pkttype, void* lparam = NULL, void* rparam = NULL, int size = 0);
    void processCtrl(CPacket& ctrlpkt);
    void checkAppLimited();
+   void checkPktForward();
    int packData(CPacket& packet, uint64_t& ts);
    int processData(CUnit* unit);
    int listen(sockaddr* addr, CPacket& packet);
 
-   void updateRcvWnd(CPacket& pkt);
+   void updateRcvWnd( int32_t seq);
    void getSackArray( int32_t* sack_array, int* sack_num);
 
 private: // Trace

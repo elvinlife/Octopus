@@ -146,7 +146,7 @@ written by
 #include "packet.h"
 
 
-const int CPacket::m_iPktHdrSize = 20;
+const int CPacket::m_iPktHdrSize = 24;
 const int CHandShake::m_iContentSize = 48;
 
 //    0                   1                   2                   3
@@ -156,25 +156,28 @@ const int CHandShake::m_iContentSize = 48;
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //   |ff |o|                     Message Number                      |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-//   | priority      |g|        Group Id                             |
+//   |                          WildCard                             |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //   |                     Destination Socket ID                     |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //   |                          Unique ID                            |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
+//   | priority      |P|        Group Id                             | (wildcard)
+//   ff: 10 (first pkt); 01(last pkt); 11(solo pkt); 00(mid)
+
 // Set up the aliases in the constructure
 CPacket::CPacket():
-m_iSeqNo((int32_t&)(m_nHeader[0])),
-m_iMsgNo((int32_t&)(m_nHeader[1])),
-//m_iTimeStamp((int32_t&)(m_nHeader[2])),
-m_iExtra((int32_t&)(m_nHeader[2])),
-m_iID((int32_t&)(m_nHeader[3])),
-m_iUId((int32_t&)(m_nHeader[4])),
-m_pcData((char*&)(m_PacketVector[1].iov_base)),
-__pad()
+    m_iSeqNo((int32_t&)(m_nHeader[0])),
+    m_iMsgNo((int32_t&)(m_nHeader[1])),
+    m_iExtra((int32_t&)(m_nHeader[2])),
+    m_iForward((int32_t&)(m_nHeader[3])),
+    m_iID((int32_t&)(m_nHeader[4])),
+    m_iUId((int32_t&)(m_nHeader[5])),
+    m_pcData((char*&)(m_PacketVector[1].iov_base)),
+    __pad()
 {
-   for (int i = 0; i < 5; ++ i)
+   for (int i = 0; i < 6; ++ i)
       m_nHeader[i] = 0;
    m_PacketVector[0].iov_base = (char *)m_nHeader;
    m_PacketVector[0].iov_len = CPacket::m_iPktHdrSize;

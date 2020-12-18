@@ -18,7 +18,7 @@ RateSample::RateSample()
     highest_ack_(0)
 {}
 
-void RateSample::onAck(Block* block)
+void RateSample::onAck(Block* block, bool real_ack)
 {
     // should update all pkts in sack_area
     if ( block->seq_+1 > highest_ack_ ) {
@@ -26,7 +26,7 @@ void RateSample::onAck(Block* block)
         pkts_in_flight_ = highest_seq_sent_ - highest_ack_ + 1;
     }
     setPacketLost( false );
-    updateRateSample(block);
+    updateRateSample(block, real_ack);
     if (prior_delivered_ts_ == 0)
         return;
     interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;
@@ -73,12 +73,12 @@ void RateSample::onTimeout()
     highest_ack_ = 0;
 }
 
-void RateSample::updateRateSample(Block *block)
+void RateSample::updateRateSample(Block *block, bool real_ack)
 {
     if (block->delivered_ts_ == 0)
         return;
-    //cumu_delivered_ += (block->m_iLength + 20);
-    cumu_delivered_ += PacketMTU;
+    cumu_delivered_ += (real_ack ? (block->m_iLength + 20) : 0);
+    //cumu_delivered_ += (real_ack ? PacketMTU : 0);
     cumu_delivered_ts_ = CTimer::getTime();
     if (block->delivered_ >= prior_delivered_) {
         prior_delivered_ = block->delivered_;

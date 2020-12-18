@@ -64,9 +64,10 @@ public:
    int32_t& m_iSeqNo;                   // alias: sequence number
    int32_t& m_iMsgNo;                   // alias: message number
    int32_t& m_iExtra;                   // alias: Extra field
+   int32_t& m_iForward;                 // alias: Forward Seq
    int32_t& m_iID;                      // alias: socket ID
    int32_t& m_iUId;                     // alias: unique pkt number 
-   uint32_t m_nHeader[5];               // The 128-bit header field
+   uint32_t m_nHeader[6];               // The 128-bit header field
    char*& m_pcData;                     // alias: data/control information
 
    static const int m_iPktHdrSize;	// packet header size

@@ -49,6 +49,8 @@ written by
 
 struct Block
 {
+    static const uint32_t PRIORITY_MUSK = 0xefffffff;
+    static const uint32_t PRIORITY_OFFSET = 29; 
     char* m_pcData;                   // pointer to the data block
     int m_iLength;                    // length of the block
 
@@ -66,6 +68,8 @@ struct Block
     uint64_t sent_ts_;
 
     Block* m_pNext;                   // next block
+
+    bool is_reliable() const { return !(m_iExtra >> PRIORITY_OFFSET); }
 };
 
 class CSndBuffer

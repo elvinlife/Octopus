@@ -10,10 +10,13 @@
 #endif
 #include <iostream>
 #include <udt.h>
+#include <chrono>
 #include "cc.h"
 #include "test_util.h"
+#include "common.h"
 
 using namespace std;
+using namespace std::chrono;
 
 #ifndef WIN32
 void* recvdata(void*);
@@ -28,7 +31,7 @@ struct PacketHeader {
     }
 
     int32_t seq() { return header_[0]; }
-    int32_t msgno() { return header_[1]; }
+    int32_t msgno() { return header_[1] & 0x1FFFFFFF; }
     uint32_t wildcard() { return (uint32_t)header_[2]; }
 };
 
@@ -149,10 +152,13 @@ DWORD WINAPI recvdata(LPVOID usocket)
        }
 
        PacketHeader header(data);
-       fprintf( stderr, "recv_msg msgno: %x wildcard: %x size: %d\n",
+
+       int64_t ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+       fprintf( stderr, "recv_msg msgno: %d wildcard: %x size: %d ts: %lums\n",
                header.msgno(),
                header.wildcard(),
-               ss);
+               ss,
+               ts);
    }
 
    delete [] data;

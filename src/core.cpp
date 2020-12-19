@@ -1655,6 +1655,8 @@ void CUDT::sample(CPerfMon* perf, bool clear)
    perf->msRTT = m_iRTT/1000.0;
    perf->mbpsBandwidth = m_iBandwidth * m_iPayloadSize * 8.0 / 1000000.0;
 
+   perf->m_iBBRMode = m_iBBRMode;
+
    #ifndef WIN32
       if (0 == pthread_mutex_trylock(&m_ConnectionLock))
    #else
@@ -1688,6 +1690,7 @@ void CUDT::CCUpdate()
 {
    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
    m_dCongestionWindow = m_pCC->m_dCWndSize;
+   m_iBBRMode = m_pCC->m_iBBRMode;
 
    if (m_llMaxBW <= 0)
       return;
@@ -2783,12 +2786,12 @@ int CUDT::processData(CUnit* unit)
                    sack_array[ SACK_LEFT(i) ],
                    sack_array[ SACK_RIGHT(i) ]);
        }
-       fprintf(stderr, "\n");
+       fprintf(stderr, "ts: %ldms\n", CTimer::getTime() / 1000);
    }
    else {
        sendCtrl(2);
-       fprintf(stderr, "send_ack, ack: %d RcvCurrSeq: %d RcvHighSeq: %d\n", 
-               m_iRcvLastAck, m_iRcvCurrSeqNo, m_iRcvHighSeqNo);
+       fprintf(stderr, "send_ack, ack: %d RcvCurrSeq: %d RcvHighSeq: %d ts: %ldms\n", 
+               m_iRcvLastAck, m_iRcvCurrSeqNo, m_iRcvHighSeqNo, CTimer::getTime() / 1000);
    }
 
    return 0;
@@ -2914,59 +2917,11 @@ void CUDT::checkTimers()
 {
    // update CC parameters
    CCUpdate();
-   //uint64_t minint = (uint64_t)(m_ullCPUFrequency * m_pSndTimeWindow->getMinPktSndInt() * 0.9);
-   //if (m_ullInterval < minint)
-   //   m_ullInterval = minint;
 
    uint64_t currtime;
    CTimer::rdtsc(currtime);
 
-   /*{{{
-   if ((currtime > m_ullNextACKTime) || ((m_pCC->m_iACKInterval > 0) && (m_pCC->m_iACKInterval <= m_iPktCount)))
-   {
-      // ACK timer expired or ACK interval is reached
-
-      sendCtrl(2);
-      CTimer::rdtsc(currtime);
-      if (m_pCC->m_iACKPeriod > 0)
-         m_ullNextACKTime = currtime + m_pCC->m_iACKPeriod * m_ullCPUFrequency;
-      else
-         m_ullNextACKTime = currtime + m_ullACKInt;
-
-      m_iPktCount = 0;
-      m_iLightACKCount = 1;
-   }
-   else if (m_iSelfClockInterval * m_iLightACKCount <= m_iPktCount)
-   {
-      //send a "light" ACK
-      sendCtrl(2, NULL, NULL, 4);
-      ++ m_iLightACKCount;
-   }
-   */
-
-   // we are not sending back repeated NAK anymore and rely on the sender's EXP for retransmission
-   //if ((m_pRcvLossList->getLossLength() > 0) && (currtime > m_ullNextNAKTime))
-   //{
-   //   // NAK timer expired, and there is loss to be reported.
-   //   sendCtrl(3);
-   //
-   //   CTimer::rdtsc(currtime);
-   //   m_ullNextNAKTime = currtime + m_ullNAKInt;
-   //}}}}
-
    uint64_t next_exp_time;
-   
-   /*
-   if (m_pCC->m_bUserDefinedRTO)
-      next_exp_time = m_ullLastRspTime + m_pCC->m_iRTO * m_ullCPUFrequency;
-   else
-   {
-      uint64_t exp_int = (m_iEXPCount * (m_iRTT + 4 * m_iRTTVar) + m_iSYNInterval) * m_ullCPUFrequency;
-      if (exp_int < m_iEXPCount * m_ullMinExpInt)
-         exp_int = m_iEXPCount * m_ullMinExpInt;
-      next_exp_time = m_ullLastRspTime + exp_int;
-   }
-   */
    // temporarily set timeout to 400ms
    next_exp_time = m_ullLastRspTime + 400000 * m_ullCPUFrequency;
 
@@ -2974,7 +2929,6 @@ void CUDT::checkTimers()
    {
       // Haven't receive any information from the peer, is it dead?!
       // timeout: at least 16 expirations and must be greater than 10 seconds
-      //if ((m_iEXPCount > 16) && (currtime - m_ullLastRspTime > 3000000 * m_ullCPUFrequency))
       if ( m_iEXPCount > 16 )
       {
          //
@@ -3000,27 +2954,15 @@ void CUDT::checkTimers()
       }
 
       // sender: Insert all the packets sent after last received acknowledgement into the sender loss list.
-      // recver: Send out a keep-alive packet
       if (m_pSndBuffer->getCurrBufSize() > 0)
       {
-          /*
-         if ((CSeqNo::incseq(m_iSndCurrSeqNo) != m_iSndLastAck) && (m_pSndLossList->getLossLength() == 0))
-         {
-            // resend all unacknowledged packets on timeout, but only if there is no packet in the loss list
-            int32_t csn = m_iSndCurrSeqNo;
-            int num = m_pSndLossList->insert(m_iSndLastAck, csn);
-            m_iTraceSndLoss += num;
-            m_iSndLossTotal += num;
-         }
-         */
-
          m_pCC->onTimeout();
          m_pRateSample->onTimeout();
          CCUpdate();
 
-         fprintf(stderr, "Timeout! RTO:%ld Timeout:%ld\n",
-                 next_exp_time - m_ullLastRspTime,
-                 currtime - m_ullLastRspTime);
+         fprintf(stderr, "Timeout! RTO:%ldus Timeout:%ldus\n",
+                 (next_exp_time - m_ullLastRspTime) / m_ullCPUFrequency,
+                 (currtime - m_ullLastRspTime) / m_ullCPUFrequency);
          m_pScoreBoard->clear();
          m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
 

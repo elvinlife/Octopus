@@ -105,7 +105,7 @@ class CBBR: public CCC
 
         virtual void onTimeout () override
         {
-            
+            m_dCWndSize = BBRMinPipeCwnd;
         }
 
     protected:
@@ -216,8 +216,7 @@ class CBBR: public CCC
                 (rtprop_stamp_ + RTpropFilterLen);
             if ( rtt >= 0 &&
                     (rtt <= rt_prop_ || rtprop_expired_) ) {
-                fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", 
-                        rtt, block->seq_);
+                //fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", rtt, block->seq_);
                 rt_prop_ = rtt;
                 rtprop_stamp_ = CTimer::getTime();
             }
@@ -321,6 +320,7 @@ class CBBR: public CCC
         {
             fprintf(stderr, "enterStartup\n");
             state_ = Startup;
+            m_iBBRMode = 0;
             pacing_gain_ = BBRHighGain;
             cwnd_gain_ = BBRHighGain;
         }
@@ -329,6 +329,7 @@ class CBBR: public CCC
         {
             fprintf(stderr, "enterDrain\n");
             state_ = Drain;
+            m_iBBRMode = 1;
             pacing_gain_ = 1 / BBRHighGain;
             cwnd_gain_ = 1;
         }
@@ -337,6 +338,7 @@ class CBBR: public CCC
         {
             fprintf(stderr, "enterProbeBW\n");
             state_ = ProbeBW;
+            m_iBBRMode = 2;
             pacing_gain_ = 1;
             cwnd_gain_ = 2;
             cycle_index_ = BBRGainCycleLen - 1;
@@ -347,6 +349,7 @@ class CBBR: public CCC
         {
             fprintf(stderr, "enterProbeRTT\n");
             state_ = ProbeRTT;
+            m_iBBRMode = 3;
             pacing_gain_ = 1;
             cwnd_gain_ = 1;
         }

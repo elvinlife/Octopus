@@ -343,6 +343,7 @@ private: // Sending related data
 
    volatile int m_iFlowWindowSize;              // Flow control window size
    volatile double m_dCongestionWindow;         // congestion window size
+   volatile int m_iBBRMode;
 
    volatile int32_t m_iSndLastAck;              // Last ACK received
    volatile int32_t m_iSndLastDataAck;          // The cumulative ACK
@@ -370,8 +371,6 @@ private: // Receiving related data
 
    int32_t m_iRcvLastAck;                       // Last sent ACK
    uint64_t m_ullLastAckTime;                   // Timestamp of last ACK
-   //int32_t m_iRcvLastAckAck;                    // Last sent ACK that has been acknowledged
-   //int32_t m_iAckSeqNo;                         // Last ACK sequence number
    int32_t m_iRcvCurrSeqNo;                     // Largest cumulative received sequence number
    int32_t m_iRcvHighSeqNo;
 

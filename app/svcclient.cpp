@@ -10,6 +10,7 @@
 #include "cc.h"
 #include "cbbr.h"
 #include "test_util.h"
+#include "common.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -21,7 +22,7 @@ struct FrameInfo {
     uint32_t layer_id_;
     int size_;
     float ssim_;
-    float rate_;
+    uint32_t rate_;
 };
 
 int main(int argc, char* argv[])
@@ -90,45 +91,55 @@ int main(int argc, char* argv[])
     }
     ifs.close();
 
-    uint32_t    frame_no = 0;
-    uint32_t    gop_no = 0;
-    int         frame_gap = 33;
+    uint32_t        frame_no = 0;
+    uint32_t        gop_no = 0;
+    unsigned int    frame_gap = 33;
+    int             bbr_rate = 0; 
+    UDT::TRACEINFO perf;
 
     while (true) {
-        int ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+        int64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+        int64_t ts;
+
+        if (UDT::ERROR == UDT::perfmon(client, &perf))
+        {
+            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
+            break;
+        }
+        bbr_rate = (int)1500 * 8.0 / perf.usPktSndPeriod * 1024;
+
         for (int i = 0; i < num_layers; ++i) {
-            int layer_no = frame_no * num_layers + i;
-            msg = trace_array[ layer_no % trace_array.size() ];
-            uint32_t wildcard = msg.layer_id_ << 29 | gop_no;
+            int msg_no = frame_no * num_layers + i;
+            msg = trace_array[ msg_no % trace_array.size() ];
+
+            if (perf.m_iBBRMode == 2 && msg.rate_ > bbr_rate)
+                continue;
+
+            uint32_t wildcard = msg.layer_id_ << 29 | msg.rate_;
             std::string msg_payload( msg.size_, 'a' );
             int ss = 0;
 
             if (UDT::ERROR == ( ss = UDT::sendmsg( client, msg_payload.c_str(), msg_payload.size(), (1<<20), 0, wildcard ) ) ) {
                 cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
-                break;
+                exit( -1 );
             }
             if ( ss != msg.size_ ) {
                 fprintf(stderr, "Error, sendmsg size mismatch: %u, ss:%u\n", msg.size_, ss);
                 exit(0);
             }
-            /*
-            fprintf( stderr, "send_frame: layer_no: %u priority: %d gop_id: %u ssim: %.2f ts_send: %u\n",
-                    layer_no,
-                    msg.layer_id_,
-                    gop_no,
-                    msg.ssim_,
-                    ts_begin );
-                    */
-            fprintf( stderr, "send_frame: layer_no: %u wildcard: %x ssim: %.2f ts_send: %u\n",
-                    layer_no,
+
+            ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+            fprintf( stderr, "send_msg: msg_no: %u wildcard: %x ssim: %.2f ts: %ldms rate: %dkbps\n",
+                    msg_no,
                     wildcard,
                     msg.ssim_,
-                    ts_begin );
+                    ts,
+                    bbr_rate
+                    );
         }
-        int ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
 
         frame_no ++;
-        if ( (ts-ts_begin) > frame_gap ) {
+        if ( (ts-ts_begin)/1000 < frame_gap ) {
             std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin)) );
         }
         if (frame_no % gop_size == 0) {

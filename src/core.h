@@ -345,7 +345,7 @@ private: // Sending related data
    volatile double m_dCongestionWindow;         // congestion window size
 
    volatile int32_t m_iSndLastAck;              // Last ACK received
-   volatile int32_t m_iSndLastDataAck;          // The real last ACK that updates the sender buffer and loss list
+   volatile int32_t m_iSndLastDataAck;          // The cumulative ACK
    volatile int32_t m_iSndForward;              // The next seq the receiver should expect, all previous pkts are acked/abandoned 
    volatile int32_t m_iSndHighSeqNo;            // The largest sequence number that has been sent (won't change after timeout)
    volatile int32_t m_iSndCurrSeqNo;            // The last seq that has been sent              

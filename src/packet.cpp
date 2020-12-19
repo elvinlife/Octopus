@@ -209,8 +209,10 @@ void CPacket::pack(int pkttype, void* lparam, void* rparam, int size)
    {
    case 2: //0010 - Acknowledgement (ACK)
       // ACK packet seq. no.
-      if (NULL != lparam)
+      if (NULL != lparam) {
          m_nHeader[1] = *(int32_t *)lparam;
+         m_nHeader[2] = *((int32_t *)lparam + 1);
+      }
 
       // data ACK seq. no. 
       // optional: RTT (microsends), RTT variance (microseconds) advertised flow window size (packets), and estimated link capacity (packets per second)
@@ -232,9 +234,12 @@ void CPacket::pack(int pkttype, void* lparam, void* rparam, int size)
       break;
       */
 
-   case 3: //0011 - Loss Report (SACK)
+   case 3: //0011 - SACK
       // loss list
-      m_nHeader[1] = *(int32_t *)lparam;
+      if (NULL != lparam) {
+          m_nHeader[1] = *(int32_t *)lparam;
+          m_nHeader[2] = *((int32_t *)lparam + 1);
+      }
       m_PacketVector[1].iov_base = (char *)rparam;
       m_PacketVector[1].iov_len = size;
 
@@ -345,6 +350,11 @@ int32_t CPacket::getRcvAck() const
    return m_nHeader[1];
 }
 
+int32_t CPacket::getRcvWnd() const
+{
+    return m_nHeader[2];
+}
+
 int CPacket::getMsgBoundary() const
 {
    // read [1] bit 0~1
@@ -371,7 +381,7 @@ int CPacket::getMsgGroupId() const
         return -1;
 }
 
-int32_t CPacket::getMsgSeq() const
+int32_t CPacket::getMsgNo() const
 {
    // read [1] bit 3~31
    return m_nHeader[1] & 0x1FFFFFFF;

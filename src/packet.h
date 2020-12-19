@@ -62,8 +62,8 @@ friend class CRcvQueue;
 
 public:
    int32_t& m_iSeqNo;                   // alias: sequence number
-   int32_t& m_iMsgNo;                   // alias: message number
-   int32_t& m_iExtra;                   // alias: Extra field
+   int32_t& m_iMsgNo;                   // alias: message number; ack for ctrlpkt
+   int32_t& m_iExtra;                   // alias: Extra field; rwnd for ctrlpkt
    int32_t& m_iForward;                 // alias: Forward Seq
    int32_t& m_iID;                      // alias: socket ID
    int32_t& m_iUId;                     // alias: unique pkt number 
@@ -152,6 +152,8 @@ public:
 
    int32_t getRcvAck() const;
 
+   int32_t getRcvWnd() const;
+
       // Functionality:
       //    Read the message boundary flag bit.
       // Parameters:
@@ -182,7 +184,7 @@ public:
       //    packet header field [1] (bit 3~31).
       //
 
-   int32_t getMsgSeq() const;
+   int32_t getMsgNo() const;
 
       // Functionality:
       //    Clone this packet.

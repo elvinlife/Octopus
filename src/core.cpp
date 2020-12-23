@@ -625,8 +625,8 @@ void CUDT::connect(const sockaddr* serv_addr)
    m_iSndForward = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
    m_iSndHighSeqNo = m_iISN - 1;
-   //m_iSndLastAck2 = m_iISN;
    m_ullSndLastAck2Time = CTimer::getTime();
+   //CCUpdate();
 
    // Inform the server my configurations.
    CPacket request;
@@ -871,8 +871,8 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    m_iSndForward = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
    m_iSndHighSeqNo = m_iISN - 1;
-   //m_iSndLastAck2 = m_iISN;
    m_ullSndLastAck2Time = CTimer::getTime();
+   //CCUpdate();
 
    // this is a reponse handshake
    hs->m_iReqType = -1;
@@ -1329,7 +1329,7 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t e
 
    checkAppLimited();
 
-   // insert the user buffer into the sening list
+   // insert the user buffer into the sending list
    m_pSndBuffer->addBuffer(data, len, msttl, inorder, extra_field);
 
    // insert this socket to the snd list if it is not on the list yet
@@ -1689,6 +1689,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
 void CUDT::CCUpdate()
 {
    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
+   m_dPacingRate = 1500 * 8.0 / m_pCC->m_dPktSndPeriod; 
    m_dCongestionWindow = m_pCC->m_dCWndSize;
    m_iBBRMode = m_pCC->m_iBBRMode;
 
@@ -1790,10 +1791,12 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
                m_iRcvLastAck = ack;
                m_pRcvBuffer->ackData(acksize);
                // signal a waiting "recv" call if there is any data available
+               /*
                pthread_mutex_lock(&m_RecvDataLock);
                if (m_bSynRecving)
                    pthread_cond_signal(&m_RecvDataCond);
                pthread_mutex_unlock(&m_RecvDataLock);
+               */
 
                // acknowledge any waiting epolls to read
                s_UDTUnited.m_EPoll.update_events(m_SocketID, m_sPollID, UDT_EPOLL_IN, true);
@@ -2586,6 +2589,17 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       {
          Block* block = NULL;
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
+             /*
+             while (block = m_pSndBuffer->readCurrData()) {
+                 if ( (block->m_iExtra & 0x0fffffff) > (uint32_t)(m_dPacingRate * 1024) ) {
+                     continue;
+                 }
+                 break;
+             }
+             if (block) {
+                block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
+             }
+             */
             block = m_pSndBuffer->readCurrData();
             if (block) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
@@ -2692,7 +2706,6 @@ void CUDT::updateRcvWnd( int32_t seq )
     }
 }
 
-
 // [left, right), left to right-1 are all received
 void CUDT::getSackArray( int32_t* sack_array, int* sack_num) {
     int sack_n = 0;
@@ -2748,9 +2761,8 @@ int CUDT::processData(CUnit* unit)
            m_iRcvHighSeqNo, 
            m_pRcvBuffer->getAvailBufSize() );
 
-   // 1. update recv window to get correct ack
-   // 2. save the data unit in recv_buffer
-   updateRcvWnd(packet.m_iSeqNo);
+   // 1. save the data unit in recv_buffer
+   // 2. update recv window to get latest ack
    int32_t offset = CSeqNo::seqoff(m_iRcvLastAck, packet.m_iSeqNo);
    if ( offset >= m_pRcvBuffer->getAvailBufSize() ) {
        char error_str[100];
@@ -2758,12 +2770,18 @@ int CUDT::processData(CUnit* unit)
                m_iRcvLastAck, packet.m_iSeqNo, m_pRcvBuffer->getAvailBufSize() );
        throw std::runtime_error(error_str);
    }
-   if (m_pRcvBuffer->addData(unit, offset) < 0) {
-       fprintf( stderr, "duplicate pkt\n" );
+   if ( offset >= 0 ) {
+       assert( m_pRcvBuffer->addData(unit, offset) >= 0);
+       if (m_bSynRecving) {
+           pthread_mutex_lock(&m_RecvDataLock);
+           pthread_cond_signal(&m_RecvDataCond);
+           pthread_mutex_unlock(&m_RecvDataLock);
+       }
    }
 
-   // forward the cumu.ack
-   offset  = CSeqNo::seqoff(m_iRcvCurrSeqNo, packet.m_iForward);
+   updateRcvWnd(packet.m_iSeqNo);
+   // forward the cumu.ack from forward
+   offset = CSeqNo::seqoff(m_iRcvCurrSeqNo, packet.m_iForward);
    if ( offset > 1 ) {
        for ( int32_t seq = m_iRcvCurrSeqNo + 1; seq < packet.m_iForward; ++seq ) {
            updateRcvWnd( seq );
@@ -2790,8 +2808,8 @@ int CUDT::processData(CUnit* unit)
    }
    else {
        sendCtrl(2);
-       fprintf(stderr, "send_ack, ack: %d RcvCurrSeq: %d RcvHighSeq: %d ts: %ldms\n", 
-               m_iRcvLastAck, m_iRcvCurrSeqNo, m_iRcvHighSeqNo, CTimer::getTime() / 1000);
+       fprintf(stderr, "send_ack, ack: %d RcvHighSeq: %d ts: %ldms\n", 
+               m_iRcvCurrSeqNo+1, m_iRcvHighSeqNo, CTimer::getTime() / 1000);
    }
 
    return 0;

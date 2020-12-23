@@ -343,6 +343,7 @@ private: // Sending related data
 
    volatile int m_iFlowWindowSize;              // Flow control window size
    volatile double m_dCongestionWindow;         // congestion window size
+   volatile double m_dPacingRate;
    volatile int m_iBBRMode;
 
    volatile int32_t m_iSndLastAck;              // Last ACK received

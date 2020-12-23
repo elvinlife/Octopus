@@ -537,12 +537,13 @@ void CRcvBuffer::dropMsg(int32_t msgno)
 
 int CRcvBuffer::readMsg(char* data, int len)
 {
-   int p, q;
+   int p, q, init_p;
    bool passack;
    if (!scanMsg(p, q, passack))
       return 0;
 
    int rs = len;
+   init_p = p;
    while (p != (q + 1) % m_iSize)
    {
       int unitsize = m_pUnit[p]->m_Packet.getLength();
@@ -552,10 +553,17 @@ int CRcvBuffer::readMsg(char* data, int len)
 
       if (unitsize > 0)
       {
-         memcpy(data, m_pUnit[p]->m_Packet.m_nHeader, headersize); 
-         memcpy(data + headersize, m_pUnit[p]->m_Packet.m_pcData, unitsize);
-         data += unitsize;
-         rs -= unitsize;
+          if (p == init_p) {
+              memcpy(data, m_pUnit[p]->m_Packet.m_nHeader, headersize); 
+              memcpy(data + headersize, m_pUnit[p]->m_Packet.m_pcData, unitsize);
+              data += (headersize + unitsize);
+              rs -= (headersize + unitsize);
+          }
+          else {
+              memcpy(data, m_pUnit[p]->m_Packet.m_pcData, unitsize);
+              data += unitsize;
+              rs -= unitsize;
+          }
       }
 
       if (!passack)
@@ -608,12 +616,14 @@ bool CRcvBuffer::scanMsg(int& p, int& q, bool& passack)
          // look ahead for the whole message
          for (int i = m_iStartPos; i != m_iLastAckPos;)
          {
+             // one hole within the msg
             if ((NULL == m_pUnit[i]) || (1 != m_pUnit[i]->m_iFlag))
             {
                good = false;
                break;
             }
 
+            // a whole msg
             if ((m_pUnit[i]->m_Packet.getMsgBoundary() == 1) || (m_pUnit[i]->m_Packet.getMsgBoundary() == 3))
                break;
 
@@ -634,6 +644,7 @@ bool CRcvBuffer::scanMsg(int& p, int& q, bool& passack)
          m_iStartPos = 0;
    }
 
+   // now m_iStartPos points to the head of a msg / the solo msg
    p = -1;                  // message head
    q = m_iStartPos;         // message tail
    passack = m_iStartPos == m_iLastAckPos;
@@ -683,12 +694,12 @@ bool CRcvBuffer::scanMsg(int& p, int& q, bool& passack)
    }
 
    // no msg found
-   if (!found)
-   {
-      // if the message is larger than the receiver buffer, return part of the message
-      if ((p != -1) && ((q + 1) % m_iSize == p))
-         found = true;
-   }
+   //if (!found)
+   //{
+   //   // if the message is larger than the receiver buffer, return part of the message
+   //   if ((p != -1) && ((q + 1) % m_iSize == p))
+   //      found = true;
+   //}
 
    return found;
 }

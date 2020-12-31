@@ -210,9 +210,9 @@ protected:
    const int32_t& m_iSYNInterval;	// UDT constant parameter, SYN
 
    double m_dPktSndPeriod;              // Packet sending period, in microseconds
+   double m_dBtlBw;                     // bottleneck link bw, in Mbps
+   int    m_iBBRMode;
    double m_dCWndSize;                  // Congestion window size, in packets
-
-   int m_iBBRMode;
 
    int m_iBandwidth;			// estimated bandwidth, packets per second
    double m_dMaxCWndSize;               // maximum cwnd size, in packets

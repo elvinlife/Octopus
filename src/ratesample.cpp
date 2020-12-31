@@ -29,18 +29,27 @@ void RateSample::onAck(Block* block, bool real_ack)
     updateRateSample(block, real_ack);
     if (prior_delivered_ts_ == 0)
         return;
-    interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;
-    //interval_ = ack_elapsed_;
+    //interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;
+    interval_ = ack_elapsed_;
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ * 8;
+        /*
         fprintf(stderr, "delivery_rate: %fMbps, sample_delivered: %ldbytes, send_elapsed: %ldms, ack_elapsed: %ldms\n", 
                 delivery_rate_, 
                 sample_delivered,
                 send_elapsed_ / 1000, 
                 ack_elapsed_ / 1000
                 );
+                */
+        fprintf(stderr, "delivery_rate: %fMbps sample_delivered: %ldbytes ack_elapsed: %ldms deliver_ts: %ldms\n", 
+                delivery_rate_, 
+                sample_delivered,
+                ack_elapsed_ / 1000,
+                block->delivered_ts_ / 1000
+                );
     }
+    block->delivered_ts_ = 0;
 }
 
 void RateSample::onPktSent(Block* block, uint64_t send_ts)
@@ -77,15 +86,15 @@ void RateSample::updateRateSample(Block *block, bool real_ack)
 {
     if (block->delivered_ts_ == 0)
         return;
-    cumu_delivered_ += (real_ack ? (block->m_iLength + 20) : 0);
-    //cumu_delivered_ += (real_ack ? PacketMTU : 0);
+    cumu_delivered_ += (real_ack ? PacketMTU : 0);
     cumu_delivered_ts_ = CTimer::getTime();
-    if (block->delivered_ >= prior_delivered_) {
+    if (block->delivered_ > prior_delivered_) {
         prior_delivered_ = block->delivered_;
         prior_delivered_ts_ = block->delivered_ts_;
         send_elapsed_ = block->sent_ts_ - block->first_sent_ts_;
-        ack_elapsed_ = cumu_delivered_ts_ - block->delivered_ts_;
+        //ack_elapsed_ = cumu_delivered_ts_ - block->delivered_ts_;
+        ack_elapsed_ = cumu_delivered_ts_ - block->sent_ts_;
         first_sent_ts_ = block->sent_ts_;
     }
-    block->delivered_ts_ = 0;
+    //block->delivered_ts_ = 0;
 }

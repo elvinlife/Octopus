@@ -281,6 +281,7 @@ Block* CSndBuffer::readCurrData()
 
 Block* CSndBuffer::readData( const int offset, int seq )
 {
+    /*
    CGuard bufferguard(m_BufLock);
 
    Block* p = m_pFirstBlock;
@@ -302,9 +303,20 @@ Block* CSndBuffer::readData( const int offset, int seq )
        throw std::runtime_error("packet read inconsistency\n");
    }
    return p;
+   */
+    CGuard bufferguard(m_BufLock);
+    Block* p = m_pFirstBlock;
+    while ( p != m_pCurrBlock ) {
+        if (p->seq_ == seq) {
+            return p;
+        }
+        p = p->m_pNext;
+    }
+    std::string error_code = "cannot find block with " + std::to_string(seq);
+    throw std::runtime_error(error_code);
 }
 
-
+/*
 void CSndBuffer::ackData(int offset)
 {
    CGuard bufferguard(m_BufLock);
@@ -315,6 +327,24 @@ void CSndBuffer::ackData(int offset)
    m_iCount -= offset;
 
    CTimer::triggerEvent();
+}
+*/
+
+void CSndBuffer::ackData(int new_ack)
+{
+   CGuard bufferguard(m_BufLock);
+   while (m_pFirstBlock != m_pCurrBlock) {
+       if ( m_pFirstBlock->seq_ == (new_ack - 1) ) {
+           m_pFirstBlock = m_pFirstBlock->m_pNext;
+           m_iCount -= 1;
+           CTimer::triggerEvent();
+           return;
+       }
+       m_pFirstBlock = m_pFirstBlock->m_pNext;
+       m_iCount -= 1;
+   }
+   std::string error_code = "cannot ack block with " + std::to_string(new_ack);
+   throw std::runtime_error(error_code);
 }
 
 int CSndBuffer::getCurrBufSize() const
@@ -417,8 +447,15 @@ int CRcvBuffer::addData(CUnit* unit, int offset)
    if (offset > m_iMaxPos)
       m_iMaxPos = offset;
 
-   if (NULL != m_pUnit[pos])
+   if (NULL != m_pUnit[pos]) {
+       if ( m_pUnit[pos]->m_Packet.m_iSeqNo != unit->m_Packet.m_iSeqNo ) {
+           std::string error_code = "addData pos occupied, old_seq: " + \
+               std::to_string(m_pUnit[pos]->m_Packet.m_iSeqNo) + \
+               " new_seq: " + std::to_string(unit->m_Packet.m_iSeqNo);
+           throw std::runtime_error(error_code);
+       }
       return -1;
+   }
    
    m_pUnit[pos] = unit;
 

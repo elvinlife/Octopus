@@ -186,7 +186,6 @@ struct CPerfMon
    int64_t usSndDuration;		// busy sending time (i.e., idle time exclusive)
 
    // instant measurements
-   double usPktSndPeriod;               // packet sending period, in microseconds
    int pktFlowWindow;                   // flow window size, in number of packets
    int pktCongestionWindow;             // congestion window size, in number of packets
    int pktFlightSize;                   // number of packets on flight
@@ -195,7 +194,8 @@ struct CPerfMon
    int byteAvailSndBuf;                 // available UDT sender buffer size
    int byteAvailRcvBuf;                 // available UDT receiver buffer size
 
-   int m_iBBRMode;
+   int bbrMode;
+   int pacingRate;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

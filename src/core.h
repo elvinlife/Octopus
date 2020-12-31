@@ -344,13 +344,15 @@ private: // Sending related data
    volatile int m_iFlowWindowSize;              // Flow control window size
    volatile double m_dCongestionWindow;         // congestion window size
    volatile double m_dPacingRate;
-   volatile int m_iBBRMode;
+   volatile double m_dBtlBw;
+   volatile int    m_iBBRMode;
 
    volatile int32_t m_iSndLastAck;              // Last ACK received
    volatile int32_t m_iSndLastDataAck;          // The cumulative ACK
    volatile int32_t m_iSndForward;              // The next seq the receiver should expect, all previous pkts are acked/abandoned 
    volatile int32_t m_iSndHighSeqNo;            // The largest sequence number that has been sent (won't change after timeout)
    volatile int32_t m_iSndCurrSeqNo;            // The last seq that has been sent              
+   volatile int32_t m_iSndCurrMsgNo;            // The last msg that has been sent
    int32_t m_iLastDecSeq;                       // Sequence number sent last decrease occurs
    //int32_t m_iSndLastAck2;                      // Last ACK2 sent back
    uint64_t m_ullSndLastAck2Time;               // The time when last ACK2 was sent back

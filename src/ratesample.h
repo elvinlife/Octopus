@@ -22,7 +22,7 @@ private:
     bool    is_app_limited_;
     bool    packet_lost_;
 
-    uint64_t pkts_in_flight_;
+    int     pkts_in_flight_;
     int     highest_seq_sent_;
     int     highest_ack_;
 
@@ -41,7 +41,7 @@ public:
 
     bool    isAppLimited() const { return is_app_limited_; }
 
-    int64_t pktsInFlight() const { return pkts_in_flight_; }
+    int pktsInFlight() const { return pkts_in_flight_; }
 
     bool    packetLost() const { return packet_lost_; }
 

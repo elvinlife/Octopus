@@ -7,6 +7,7 @@
 #include <chrono>
 #include <thread>
 #include <udt.h>
+#include <map>
 #include "cc.h"
 #include "cbbr.h"
 #include "test_util.h"
@@ -15,7 +16,6 @@
 using namespace std;
 using namespace std::chrono;
 
-void* monitor(void*);
 
 struct FrameInfo {
     int msg_id_;
@@ -25,6 +25,7 @@ struct FrameInfo {
     uint32_t rate_;
 };
 
+/*
 int main(int argc, char* argv[])
 {
     if ((4 != argc) || (0 == atoi(argv[2])))
@@ -55,6 +56,7 @@ int main(int argc, char* argv[])
     // UDT Options
     //UDT::setsockopt(client, 0, UDT_CC, new CCCFactory<CTCP>, sizeof(CCCFactory<CTCP>));
     UDT::setsockopt(client, 0, UDT_CC, new CCCFactory<CBBR>, sizeof(CCCFactory<CBBR>));
+    UDT::setsockopt(client, 0, UDT_SNDSYN, new bool(true), sizeof(bool));
     //UDT::setsockopt(client, 0, UDT_MSS, new int(9000), sizeof(int));
     //UDT::setsockopt(client, 0, UDT_SNDBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(client, 0, UDP_SNDBUF, new int(10000000), sizeof(int));
@@ -77,45 +79,33 @@ int main(int argc, char* argv[])
 
     freeaddrinfo(peer);
 
-    pthread_create(new pthread_t, NULL, monitor, &client);
 
     FrameInfo msg;
     int     gop_size = 0;
     int     num_layers = 3;
     vector<FrameInfo> trace_array;
     std::ifstream ifs( argv[3] );
-    ifs >> gop_size;
+    ifs >> gop_size >> num_layers;
     while( ifs >> msg.msg_id_ >> msg.layer_id_ >> \
             msg.size_ >> msg.rate_ >> msg.ssim_ ) {
+        msg.rate_ = (int)msg.rate_ * 1500.0 /1400.0;
         trace_array.push_back( msg );
     }
     ifs.close();
 
-    uint32_t        frame_no = 0;
-    uint32_t        gop_no = 0;
-    unsigned int    frame_gap = 33;
-    int             bbr_rate = 0; 
-    UDT::TRACEINFO perf;
+    uint32_t    frame_no = 0;
+    uint32_t    gop_no = 0;
+    int         frame_gap = 33;
 
     while (true) {
         int64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-        int64_t ts;
-
-        if (UDT::ERROR == UDT::perfmon(client, &perf))
-        {
-            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
-            break;
-        }
-        bbr_rate = (int)1500 * 8.0 / perf.usPktSndPeriod * 1024;
+        int64_t ts = ts_begin;
 
         for (int i = 0; i < num_layers; ++i) {
             int msg_no = frame_no * num_layers + i;
             msg = trace_array[ msg_no % trace_array.size() ];
 
-            if (perf.m_iBBRMode == 2 && msg.rate_ > bbr_rate)
-                continue;
-
-            uint32_t wildcard = msg.layer_id_ << 29 | msg.rate_;
+            uint32_t wildcard = (msg.layer_id_+1) << 29 | msg.rate_;
             std::string msg_payload( msg.size_, 'a' );
             int ss = 0;
 
@@ -129,17 +119,17 @@ int main(int argc, char* argv[])
             }
 
             ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-            fprintf( stderr, "send_msg: msg_no: %u wildcard: %x ssim: %.2f ts: %ldms rate: %dkbps\n",
+            fprintf( stdout, "send_msg msg_no: %u size: %d wildcard: %x ssim: %.2f ts_send: %ld\n",
                     msg_no,
+                    msg.size_,
                     wildcard,
                     msg.ssim_,
-                    ts,
-                    bbr_rate
+                    ts
                     );
         }
 
         frame_no ++;
-        if ( (ts-ts_begin)/1000 < frame_gap ) {
+        if ( (ts-ts_begin) < frame_gap ) {
             std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin)) );
         }
         if (frame_no % gop_size == 0) {
@@ -150,44 +140,150 @@ int main(int argc, char* argv[])
     UDT::close(client);
     return 0;
 }
+*/
 
-void* monitor(void* s)
+int main(int argc, char* argv[])
 {
-    /*
-   UDTSOCKET u = *(UDTSOCKET*)s;
+    if ((4 != argc) || (0 == atoi(argv[2])))
+    {
+        cout << "usage: appclient server_ip server_port trace_file" << endl;
+        return 0;
+    }
 
-   UDT::TRACEINFO perf;
+    // Automatically start up and clean up UDT module.
+    UDTUpDown _udt_;
 
-   cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
+    struct addrinfo hints, *local, *peer;
 
-   while (true)
-   {
-      #ifndef WIN32
-         sleep(1);
-      #else
-         Sleep(1000);
-      #endif
+    memset(&hints, 0, sizeof(struct addrinfo));
 
-      if (UDT::ERROR == UDT::perfmon(u, &perf))
-      {
-         cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
-         break;
-      }
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
 
-      fprintf(stdout, "%8.5f\t\t%6.2f\t\t%d\t\t%f\t%d\t%d\n",
-              perf.mbpsSendRate,
-              perf.msRTT,
-              perf.pktCongestionWindow,
-              perf.usPktSndPeriod,
-              perf.pktRecvACK,
-              perf.pktRecvNAK);
+    if (0 != getaddrinfo(NULL, "9000", &hints, &local))
+    {
+        cout << "incorrect network address.\n" << endl;
+        return 0;
+    }
 
-   }
-   */
+    UDTSOCKET client = UDT::socket(local->ai_family, local->ai_socktype, local->ai_protocol);
 
-   #ifndef WIN32
-      return NULL;
-   #else
-      return 0;
-   #endif
+    // UDT Options
+    UDT::setsockopt(client, 0, UDT_CC, new CCCFactory<CBBR>, sizeof(CCCFactory<CBBR>));
+    UDT::setsockopt(client, 0, UDT_SNDSYN, new bool(true), sizeof(bool));
+
+    freeaddrinfo(local);
+
+    if (0 != getaddrinfo(argv[1], argv[2], &hints, &peer))
+    {
+        cout << "incorrect server/peer address. " << argv[1] << ":" << argv[2] << endl;
+        return 0;
+    }
+
+    // connect to the server, implict bind
+    if (UDT::ERROR == UDT::connect(client, peer->ai_addr, peer->ai_addrlen))
+    {
+        cout << "connect: " << UDT::getlasterror().getErrorMessage() << endl;
+        return 0;
+    }
+
+    freeaddrinfo(peer);
+
+    FrameInfo msg;
+    int     gop_size = 0;
+    int     num_layers = 3;
+    int     max_bitrate = 0;
+
+    //vector<FrameInfo> trace_array;
+    map<int, vector<FrameInfo>> trace_arrays;
+    std::ifstream ifs( argv[3] );
+    ifs >> gop_size >> num_layers;
+    while( ifs >> max_bitrate >> \
+            msg.msg_id_ >> \
+            msg.layer_id_ >> \
+            msg.size_ >> \
+            msg.rate_ >> \
+            msg.ssim_ ) {
+        max_bitrate = (int) max_bitrate * 15.0 / 14.0;
+        msg.rate_ = (int)msg.rate_ * 1500.0 /1400.0;
+        if ( trace_arrays.find(max_bitrate) == trace_arrays.end() ) {
+            trace_arrays[max_bitrate] = vector<FrameInfo>();
+        }
+        trace_arrays[max_bitrate].push_back( msg );
+    }
+    ifs.close();
+
+    uint32_t    frame_no = 0;
+    uint32_t    gop_no = 0;
+    uint64_t    frame_gap = 33;
+    int         bbr_rate = 0; 
+    int         key_trace = 0;
+    int smallest_key = 1 << 20;
+    UDT::TRACEINFO perf;
+
+    while (true) {
+        if (frame_no % gop_size == 0) {
+            gop_no += 1;
+            bbr_rate = perf.pacingRate;
+            key_trace = 0;
+            for (auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
+                if ( it->first < bbr_rate ) {
+                    key_trace = it->first;
+                }
+                if ( it->first < smallest_key )
+                    smallest_key = it->first;
+            }
+            if ( key_trace == 0 )
+                key_trace = smallest_key;
+        }
+
+        uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+        uint64_t ts = ts_begin;
+
+        if (UDT::ERROR == UDT::perfmon(client, &perf))
+        {
+            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
+            break;
+        }
+
+        for (int i = 0; i < num_layers; ++i) {
+            int msg_no = frame_no * num_layers + i;
+            msg = trace_arrays[key_trace][ msg_no % trace_arrays[key_trace].size() ];
+
+            uint32_t wildcard = (msg.layer_id_+1) << 29 | msg.rate_;
+            if ( i == 0 )
+                wildcard = (msg.layer_id_+1) << 29;
+
+            std::string msg_payload( msg.size_, 'a' );
+            int ss = 0;
+
+            if (UDT::ERROR == ( ss = UDT::sendmsg( client, msg_payload.c_str(), msg_payload.size(), (1<<20), 0, wildcard ) ) ) {
+                cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
+                exit( -1 );
+            }
+            if ( ss != msg.size_ ) {
+                fprintf(stderr, "Error, sendmsg size mismatch: %u, ss:%u\n", msg.size_, ss);
+                exit(0);
+            }
+
+            ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+            fprintf( stdout, "send_msg msg_no: %u size: %d wildcard: %x ssim: %.2f ts_send: %lu key_trace: %d\n",
+                    msg_no,
+                    msg.size_,
+                    wildcard,
+                    msg.ssim_,
+                    ts,
+                    key_trace
+                    );
+        }
+
+        frame_no ++;
+        if ( ts-ts_begin < frame_gap ) {
+            std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin) ) );
+        }
+    }
+
+    UDT::close(client);
+    return 0;
 }

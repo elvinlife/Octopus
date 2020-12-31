@@ -69,6 +69,7 @@ int main(int argc, char* argv[])
    UDTSOCKET serv = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
    // UDT Options
+   UDT::setsockopt(serv, 0, UDT_RCVSYN, new bool(true), sizeof(bool));
    //UDT::setsockopt(serv, 0, UDT_CC, new CCCFactory<CTCP>, sizeof(CCCFactory<CTCP>));
    //UDT::setsockopt(serv, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
    //UDT::setsockopt(serv, 0, UDT_MSS, new int(9000), sizeof(int));
@@ -154,10 +155,10 @@ DWORD WINAPI recvdata(LPVOID usocket)
        PacketHeader header(data);
 
        int64_t ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-       fprintf( stderr, "recv_msg msgno: %d wildcard: %x size: %d ts: %lums\n",
+       fprintf( stdout, "recv_msg msg_no: %d size: %d wildcard: %x ts_recv: %lu\n",
                header.msgno(),
-               header.wildcard(),
                ss,
+               header.wildcard(),
                ts);
    }
 

@@ -73,8 +73,7 @@ class CBBR: public CCC
                 initFullPipe();
                 initPacingRate();
                 enterStartup();
-                fprintf(stderr, "bbr_init: rate: %f, cwnd: %f, btl_bw: %f, rt_prop: %ld\n"\
-                        , pacing_rate_, m_dCWndSize, btl_bw_, rt_prop_);
+                updateControlParameters();
             }
 
         inline void initRoundCounting()
@@ -116,7 +115,7 @@ class CBBR: public CCC
             checkFullPipe( rs );
             checkDrain( rs );
             updateRTprop( block );
-            checkProbeRTT( rs );
+            //checkProbeRTT( rs );
         }
 
         void updateBtlBw( Block* block, const RateSample* rs)
@@ -203,7 +202,8 @@ class CBBR: public CCC
 
         void checkDrain( const RateSample* rs )
         {
-            if ( state_ == Startup && filled_pipe_ )
+            if ( state_ == Startup && 
+                    ( filled_pipe_ || rs->packetLost() ) )
                 enterDrain();
             if ( state_ == Drain && rs->pktsInFlight() <= getBDP(1.0) )
                 enterProbeBW();
@@ -265,6 +265,7 @@ class CBBR: public CCC
             // set pacing rate
             setPacingRateWithGain( pacing_gain_ );
             m_dPktSndPeriod = (PacketMTU * 8.0) / pacing_rate_;
+            m_dBtlBw = btl_bw_;
             // set cwnd
             setCwnd();
             fprintf(stderr, "bbr_status: rate: %f, cwnd: %f, btl_bw: %f, rt_prop: %ld, pacing_gain_: %f cwnd_gain: %.2f ts: %ldms\n",
@@ -319,8 +320,8 @@ class CBBR: public CCC
         inline void enterStartup()
         {
             fprintf(stderr, "enterStartup\n");
+            m_iBBRMode = 1;
             state_ = Startup;
-            m_iBBRMode = 0;
             pacing_gain_ = BBRHighGain;
             cwnd_gain_ = BBRHighGain;
         }
@@ -328,8 +329,8 @@ class CBBR: public CCC
         inline void enterDrain()
         {
             fprintf(stderr, "enterDrain\n");
+            m_iBBRMode = 2;
             state_ = Drain;
-            m_iBBRMode = 1;
             pacing_gain_ = 1 / BBRHighGain;
             cwnd_gain_ = 1;
         }
@@ -337,8 +338,8 @@ class CBBR: public CCC
         inline void enterProbeBW()
         {
             fprintf(stderr, "enterProbeBW\n");
+            m_iBBRMode = 3;
             state_ = ProbeBW;
-            m_iBBRMode = 2;
             pacing_gain_ = 1;
             cwnd_gain_ = 2;
             cycle_index_ = BBRGainCycleLen - 1;
@@ -348,8 +349,8 @@ class CBBR: public CCC
         inline void enterProbeRTT()
         {
             fprintf(stderr, "enterProbeRTT\n");
+            m_iBBRMode = 4;
             state_ = ProbeRTT;
-            m_iBBRMode = 3;
             pacing_gain_ = 1;
             cwnd_gain_ = 1;
         }

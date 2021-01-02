@@ -50,6 +50,12 @@ exit:
                 max = value_array_[i % window_len_];
         return max;
     }
+
+    void clear()
+    {
+        first_round_ = 0;
+        last_round_ = 0;
+    }
 };
 
 class CBBR: public CCC
@@ -104,7 +110,13 @@ class CBBR: public CCC
 
         virtual void onTimeout () override
         {
-            m_dCWndSize = BBRMinPipeCwnd;
+            btl_bw_filter_.clear();
+            round_start_ = false;
+            round_count_ = 0;
+            initFullPipe();
+            btl_bw_ = pacing_rate_ = getThroughput(BBRMinPipeCwnd, BBRInitRTT);
+            enterStartup();
+            updateControlParameters();
         }
 
     protected:
@@ -144,6 +156,20 @@ class CBBR: public CCC
                 round_start_ = false;
             }
         }
+
+        /*
+        void updateRound( Block* block, const RateSample* rs)
+        {
+            uint64_t now = CTimer::getTime();
+            if (now > next_round_delivered_) {
+                round_count_ += ( (now - next_round_delivered_) / 120000 + 1 );
+                next_round_delivered_ = now + 120000;
+                round_start_ = true;
+            }
+            else
+                round_start_ = false;
+        }
+        */
 
         void checkCyclePhase( const RateSample* rs)
         {
@@ -222,6 +248,20 @@ class CBBR: public CCC
             }
         }
 
+        /*
+        void updateRTprop(Block* block)
+        {
+            uint64_t rtt = CTimer::getTime() - block->sent_ts_;
+            rtprop_expired_ = CTimer::getTime() > 
+                (rtprop_stamp_ + RTpropFilterLen);
+            if ( rtt >= 0 && rtt <= rt_prop_ ) {
+                //fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", rtt, block->seq_);
+                rt_prop_ = rtt;
+                rtprop_stamp_ = CTimer::getTime();
+            }
+        }
+        */
+
         void checkProbeRTT( const RateSample* rs )
         {
             if ( state_ != ProbeRTT &&
@@ -268,13 +308,14 @@ class CBBR: public CCC
             m_dBtlBw = btl_bw_;
             // set cwnd
             setCwnd();
-            fprintf(stderr, "bbr_status: rate: %f, cwnd: %f, btl_bw: %f, rt_prop: %ld, pacing_gain_: %f cwnd_gain: %.2f ts: %ldms\n",
+            fprintf(stderr, "bbr_status: rate: %.2f, cwnd: %.2f, btl_bw: %.2f, rt_prop: %ld, pacing_gain_: %.2f round: %d full_bw_cnt: %d ts: %ldms\n",
                     pacing_rate_,
                     m_dCWndSize,
                     btl_bw_,
                     rt_prop_,
                     pacing_gain_,
-                    cwnd_gain_,
+                    round_count_,
+                    full_bw_count_,
                     CTimer::getTime() / 1000
                     );
         }

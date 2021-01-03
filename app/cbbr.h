@@ -144,6 +144,7 @@ class CBBR: public CCC
             }
         }
 
+        /*
         void updateRound( Block* block, const RateSample* rs)
         {
             cumu_delivered_ = rs->cumuDelivered();
@@ -156,20 +157,19 @@ class CBBR: public CCC
                 round_start_ = false;
             }
         }
+        */
 
-        /*
         void updateRound( Block* block, const RateSample* rs)
         {
             uint64_t now = CTimer::getTime();
             if (now > next_round_delivered_) {
-                round_count_ += ( (now - next_round_delivered_) / 120000 + 1 );
-                next_round_delivered_ = now + 120000;
+                round_count_ += ( (now - next_round_delivered_) / rt_prop_ + 1 );
+                next_round_delivered_ = now + rt_prop_;
                 round_start_ = true;
             }
             else
                 round_start_ = false;
         }
-        */
 
         void checkCyclePhase( const RateSample* rs)
         {
@@ -242,7 +242,7 @@ class CBBR: public CCC
                 (rtprop_stamp_ + RTpropFilterLen);
             if ( rtt >= 0 &&
                     (rtt <= rt_prop_ || rtprop_expired_) ) {
-                //fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", rtt, block->seq_);
+                fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", rtt, block->seq_);
                 rt_prop_ = rtt;
                 rtprop_stamp_ = CTimer::getTime();
             }
@@ -308,7 +308,7 @@ class CBBR: public CCC
             m_dBtlBw = btl_bw_;
             // set cwnd
             setCwnd();
-            fprintf(stderr, "bbr_status: rate: %.2f, cwnd: %.2f, btl_bw: %.2f, rt_prop: %ld, pacing_gain_: %.2f round: %d full_bw_cnt: %d ts: %ldms\n",
+            fprintf(stderr, "bbr_status rate: %.2f  cwnd: %.2f  btl_bw: %.2f  rt_prop: %ld  pacing_gain_: %.2f  round: %d  full_bw_cnt: %d  ts: %ldms\n",
                     pacing_rate_,
                     m_dCWndSize,
                     btl_bw_,

@@ -268,14 +268,14 @@ int main(int argc, char* argv[])
             }
 
             ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-            fprintf( stdout, "send_msg msg_no: %u size: %d wildcard: %x ssim: %.2f ts_send: %lu key_trace: %d\n",
+            fprintf( stdout, "send_msg msg_no: %u size: %d layer_id: %d ssim: %.2f ts_send: %lu key_trace: %d frame_no: %d\n",
                     msg_no,
                     msg.size_,
-                    wildcard,
+                    msg_no % num_layers,
                     msg.ssim_,
                     ts,
-                    key_trace
-                    );
+                    key_trace,
+                    msg_no / num_layers);
         }
 
         frame_no ++;

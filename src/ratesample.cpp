@@ -21,7 +21,7 @@ RateSample::RateSample()
 void RateSample::onAck(Block* block, bool real_ack)
 {
     // should update all pkts in sack_area
-    if ( block->seq_+1 > highest_ack_ ) {
+    if ( block->seq_ + 1 > highest_ack_ ) {
         highest_ack_ = block->seq_ + 1;
         pkts_in_flight_ = highest_seq_sent_ - highest_ack_ + 1;
     }
@@ -42,11 +42,12 @@ void RateSample::onAck(Block* block, bool real_ack)
                 ack_elapsed_ / 1000
                 );
                 */
-        fprintf(stderr, "delivery_rate: %fMbps sample_delivered: %ldbytes ack_elapsed: %ldms sent_ts: %ldms\n", 
+        fprintf(stderr, "delivery_rate: %.2fMbps  sample_delivered: %ldByte  cumu_delivered_ts_: %ldms  sent_ts: %ldms  ack_elapsed_: %ldms\n", 
                 delivery_rate_, 
                 sample_delivered,
-                ack_elapsed_ / 1000,
-                block->sent_ts_ / 1000
+                cumu_delivered_ts_ / 1000,
+                block->sent_ts_ / 1000,
+                ack_elapsed_ / 1000
                 );
     }
     block->delivered_ts_ = 0;
@@ -70,6 +71,7 @@ void RateSample::onTimeout()
     packet_lost_ = false;
 }
 
+/*
 void RateSample::updateRateSample(Block *block, bool real_ack)
 {
     if (block->delivered_ts_ == 0)
@@ -84,5 +86,16 @@ void RateSample::updateRateSample(Block *block, bool real_ack)
         ack_elapsed_ = cumu_delivered_ts_ - block->sent_ts_;
         //first_sent_ts_ = block->sent_ts_;
     }
-    //block->delivered_ts_ = 0;
+}
+*/
+
+void RateSample::updateRateSample(Block *block, bool real_ack)
+{
+    if (block->delivered_ts_ == 0)
+        return;
+    cumu_delivered_ += (real_ack ? PacketMTU : 0);
+    cumu_delivered_ts_ = CTimer::getTime();
+    prior_delivered_ = block->delivered_;
+    prior_delivered_ts_ = block->delivered_ts_;
+    ack_elapsed_ = cumu_delivered_ts_ - block->sent_ts_;
 }

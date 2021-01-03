@@ -2614,8 +2614,9 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
                      break;
                  }
              }
-             if (block) {
+             if ( block ) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
+                m_pRateSample->onPktSent(block, CTimer::getTime() + (ts - entertime) / m_ullCPUFrequency );
              }
          }
          else {
@@ -2635,8 +2636,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
             packet.m_iExtra = block->m_iExtra;
             packet.m_iForward = m_iSndForward;
             payload = block->m_iLength;
-
-            m_pRateSample->onPktSent(block, CTimer::getTime() + (ts - entertime) / m_ullCPUFrequency );
 
             if (packet.m_iSeqNo > m_iSndHighSeqNo)
                 m_iSndHighSeqNo = packet.m_iSeqNo;
@@ -2663,13 +2662,12 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
    packet.m_iID = m_PeerID;
    packet.setLength(payload);
 
-
    ++ m_llTraceSent;
    ++ m_llSentTotal;
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d send_ts: %ldms\n",
+   fprintf( stderr, "%s seq: %d  msg_no: %d  wildcard: %x  size: %d  SndCumuAck: %d  SndCurrSeq: %d  send_ts: %ldms\n",
            send_pkt.c_str(),
            packet.m_iSeqNo,
            packet.getMsgNo(),
@@ -2677,8 +2675,8 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            packet.getLength() + CPacket::m_iPktHdrSize,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
-           //(CTimer::getTime() +  (ts - entertime) / m_ullCPUFrequency) / 1000
-           duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count()
+           (CTimer::getTime() +  (ts - entertime) / m_ullCPUFrequency) / 1000
+           //duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count()
            );
 
    m_ullTargetTime = ts;
@@ -2984,7 +2982,7 @@ void CUDT::checkTimers()
 
    uint64_t next_exp_time;
    // temporarily set timeout to 400ms
-   next_exp_time = m_ullLastRspTime + 2000000 * m_ullCPUFrequency;
+   next_exp_time = m_ullLastRspTime + 1000000 * m_ullCPUFrequency;
 
    if (currtime > next_exp_time)
    {

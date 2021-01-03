@@ -139,13 +139,6 @@ DWORD WINAPI recvdata(LPVOID usocket)
        int var_size = sizeof(int);
        UDT::getsockopt(recver, 0, UDT_RCVDATA, &rcv_size, &var_size);
        int ss = 0;
-       /*
-          if (UDT::ERROR == (rs = UDT::recv(recver, data + rsize, size - rsize, 0)))
-          {
-          cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
-          break;
-          }
-          */
        if (UDT::ERROR == ( ss = UDT::recvmsg(recver, data, size)) )
        {
            cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
@@ -155,11 +148,14 @@ DWORD WINAPI recvdata(LPVOID usocket)
        PacketHeader header(data);
 
        int64_t ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-       fprintf( stdout, "recv_msg msg_no: %d size: %d wildcard: %x ts_recv: %lu\n",
+       fprintf( stdout, "recv_msg msg_no: %d size: %d wildcard: %x ts_recv: %lu frame_no: %d layer_id: %d\n",
                header.msgno(),
                ss,
                header.wildcard(),
-               ts);
+               ts,
+               header.msgno() / 3,
+               header.msgno() % 3
+               );
    }
 
    delete [] data;

@@ -93,8 +93,7 @@ public: //API
    static int setsockopt(UDTSOCKET u, int level, UDTOpt optname, const void* optval, int optlen);
    static int send(UDTSOCKET u, const char* buf, int len, int flags);
    static int recv(UDTSOCKET u, char* buf, int len, int flags);
-   //static int sendmsg(UDTSOCKET u, const char* buf, int len, int ttl = -1, bool inorder = false);
-   static int sendmsg(UDTSOCKET u, const char* buf, int len, int ttl = -1, bool inorder = false, uint32_t extra_field = 0 );
+   static int sendmsg(UDTSOCKET u, const char* buf, int len, int msg_no = -1, bool inorder = false, uint32_t extra_field = 0, uint32_t max_queue = 0xffffffff);
    static int recvmsg(UDTSOCKET u, char* buf, int len);
    static int64_t sendfile(UDTSOCKET u, std::fstream& ifs, int64_t& offset, int64_t size, int block = 364000);
    static int64_t recvfile(UDTSOCKET u, std::fstream& ofs, int64_t& offset, int64_t size, int block = 7280000);
@@ -200,8 +199,7 @@ private:
       // Returned value:
       //    Actual size of data sent.
 
-   //int sendmsg(const char* data, int len, int ttl, bool inorder, int8_t priority, int32_t gid);
-   int sendmsg(const char* data, int len, int ttl, bool inorder, uint32_t extra_field);
+   int sendmsg(const char* data, int len, int msg_no, bool inorder, uint32_t extra_field, uint32_t max_queue);
 
       // Functionality:
       //    Receive a message to buffer "data".

@@ -223,6 +223,80 @@ int main(int argc, char* argv[])
     UDT::TRACEINFO perf;
 
     while (true) {
+        if (UDT::ERROR == UDT::perfmon(client, &perf)) {
+            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
+            break;
+        }
+        bbr_rate = perf.pacingRate;
+        // choose the correct bitrate level
+        key_trace = 0;
+        for (auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
+            if ( it->first < bbr_rate ) {
+                key_trace = it->first;
+            }
+            if ( it->first < smallest_key )
+                smallest_key = it->first;
+        }
+        if ( key_trace == 0 )
+            key_trace = smallest_key;
+
+        bool skip_this_group = false;
+        for (int i = 0; i < gop_size; ++i) {
+            uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+            uint64_t ts = ts_begin;
+            int max_queue = key_trace * gop_size * frame_gap / 1000 / 12;
+
+            for (int j = 0; j < num_layers; ++j) {
+                int msg_no = frame_no * num_layers + j;
+                msg = trace_arrays[key_trace][ msg_no % trace_arrays[key_trace].size() ];
+
+                uint32_t wildcard = (msg.layer_id_+1) << 29 | msg.rate_;
+                if ( j == 0 )
+                    wildcard = (msg.layer_id_+1) << 29;
+
+                std::string msg_payload( msg.size_, 'a' );
+                int ss = 0;
+
+                if (!skip_this_group) {
+                    if (UDT::ERROR == ( ss = UDT::sendmsg( 
+                                    client, msg_payload.c_str(), 
+                                    msg_payload.size(), msg_no, 
+                                    false, wildcard, max_queue ) ) ) {
+                        cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
+                        skip_this_group = true;
+                    }
+                    else 
+                        if ( ss != msg.size_ ) {
+                            fprintf(stderr, "Error, sendmsg size mismatch: %u, ss:%u\n", msg.size_, ss);
+                            exit(0);
+                        }
+                }
+
+                ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+                fprintf( stdout, "send_msg  msg_no: %u  size: %d  layer_id: %d  ssim: %.2f  ts_send: %lu  key_trace: %d  skip: %d\n",
+                        msg_no,
+                        msg.size_,
+                        msg_no % num_layers,
+                        msg.ssim_,
+                        ts,
+                        key_trace,
+                        skip_this_group );
+            }
+            frame_no += 1;
+            if ( ts-ts_begin < frame_gap ) {
+                std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin) ) );
+            }
+        }
+        gop_no += 1;
+    }
+
+    /*
+    while (true) {
+        if (UDT::ERROR == UDT::perfmon(client, &perf)) {
+            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
+            break;
+        }
+
         if (frame_no % gop_size == 0) {
             gop_no += 1;
             bbr_rate = perf.pacingRate;
@@ -240,12 +314,6 @@ int main(int argc, char* argv[])
 
         uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
         uint64_t ts = ts_begin;
-
-        if (UDT::ERROR == UDT::perfmon(client, &perf))
-        {
-            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
-            break;
-        }
 
         for (int i = 0; i < num_layers; ++i) {
             int msg_no = frame_no * num_layers + i;
@@ -283,6 +351,7 @@ int main(int argc, char* argv[])
             std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin) ) );
         }
     }
+    */
 
     UDT::close(client);
     return 0;

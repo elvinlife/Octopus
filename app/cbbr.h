@@ -133,10 +133,12 @@ class CBBR: public CCC
         void updateBtlBw( Block* block, const RateSample* rs)
         {
             updateRound( block, rs );
-            // ratesample hasn't started yet
-            if ( rs->deliveryRate() == 0 )
-                return;
-            if ( rs->deliveryRate() >= btl_bw_
+            // ratesample cannot go below min sending rate
+            float delivery_rate = rs->deliveryRate();
+            if ( delivery_rate < getThroughput(BBRMinPipeCwnd, BBRInitRTT) ) {
+                delivery_rate = getThroughput(BBRMinPipeCwnd, BBRInitRTT); 
+            }
+            if ( delivery_rate >= btl_bw_
                     || !rs->isAppLimited() ) {
                 btl_bw_ = btl_bw_filter_.update(
                         round_count_,
@@ -240,8 +242,9 @@ class CBBR: public CCC
             uint64_t rtt = CTimer::getTime() - block->sent_ts_;
             rtprop_expired_ = CTimer::getTime() > 
                 (rtprop_stamp_ + RTpropFilterLen);
-            if ( rtt >= 0 &&
-                    (rtt <= rt_prop_ || rtprop_expired_) ) {
+            //if ( rtt >= 0 && 
+            //        (rtt <= rt_prop_ || rtprop_expired_) ) {
+            if ( rtt >= 0 && rtt <= rt_prop_ ) {
                 fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", rtt, block->seq_);
                 rt_prop_ = rtt;
                 rtprop_stamp_ = CTimer::getTime();
@@ -402,7 +405,7 @@ class CBBR: public CCC
 
         static const uint64_t RTpropFilterLen   = 10000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
-        static const int BBRMinPipeCwnd         = 4;
+        static const int BBRMinPipeCwnd         = 2;
         static const int BBRInitRTT             = 100000;
 
         static const int PacketMTU = 1500;

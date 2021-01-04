@@ -1241,7 +1241,7 @@ int CUDT::recv(char* data, int len)
    return res;
 }
 
-int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t extra_field)
+int CUDT::sendmsg(const char* data, int len, int msg_no, bool inorder, uint32_t extra_field, uint32_t max_queue)
 {
    if (UDT_STREAM == m_iSockType)
       throw CUDTException(5, 9, 0);
@@ -1266,6 +1266,10 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t e
       uint64_t currtime;
       CTimer::rdtsc(currtime);
       m_ullLastRspTime = currtime;
+   }
+
+   if ( m_pSndBuffer->getCurrQueueSize() > (int)max_queue ) {
+       throw CUDTException(6, 1, 0);
    }
 
    if ((m_iSndBufSize - m_pSndBuffer->getCurrBufSize()) * m_iPayloadSize < len)
@@ -1332,7 +1336,7 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t e
    checkAppLimited();
 
    // insert the user buffer into the sending list
-   m_pSndBuffer->addBuffer(data, len, msttl, inorder, extra_field);
+   m_pSndBuffer->addBuffer(data, len, msg_no, inorder, extra_field);
 
    // insert this socket to the snd list if it is not on the list yet
    m_pSndQueue->m_pSndUList->update(this, false);
@@ -2605,6 +2609,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       {
          Block* block = NULL;
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
+             /*
              int send_rate = m_dPacingRate > m_dBtlBw ? m_dPacingRate : m_dBtlBw;
              while ( (block = m_pSndBuffer->readCurrData()) != NULL ) {
                  if ( (block->m_iMsgNo & 0x1fffffff) == m_iSndCurrMsgNo )
@@ -2614,6 +2619,8 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
                      break;
                  }
              }
+             */
+             block = m_pSndBuffer->readCurrData();
              if ( block ) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
                 m_pRateSample->onPktSent(block, CTimer::getTime() + (ts - entertime) / m_ullCPUFrequency );

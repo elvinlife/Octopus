@@ -41,6 +41,7 @@ written by
 #include <cstring>
 #include <cmath>
 #include <exception>
+#include <cassert>
 #include "buffer.h"
 
 using namespace std;
@@ -56,7 +57,8 @@ m_pBuffer(NULL),
 m_iNextMsgNo(0),
 m_iSize(size),
 m_iMSS(mss),
-m_iCount(0)
+m_iCount(0),
+m_iQueue(0)
 {
    // initial physical buffer of "size"
    m_pBuffer = new Buffer;
@@ -119,7 +121,7 @@ CSndBuffer::~CSndBuffer()
    #endif
 }
 
-void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint32_t extra_field)
+void CSndBuffer::addBuffer(const char* data, int len, int msg_no, bool order, uint32_t extra_field)
 {
    int size = len / m_iMSS;
    if ((len % m_iMSS) != 0)
@@ -146,14 +148,14 @@ void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint3
       s->m_iExtra = extra_field;
       //fprintf(stderr, "addBuffer, m_iExtra: %x, priority: %x, msgno: %x\n", s->m_iExtra, priority, m_iNextMsgNo );
 
-      s->m_iMsgNo = m_iNextMsgNo | inorder;
+      s->m_iMsgNo = (int32_t)msg_no | inorder;
       if (i == 0)
          s->m_iMsgNo |= 0x80000000;
       if (i == size - 1)
          s->m_iMsgNo |= 0x40000000;
 
       s->m_OriginTime = time;
-      s->m_iTTL = ttl;
+      //s->m_iTTL = ttl;
 
       s = s->m_pNext;
    }
@@ -161,11 +163,14 @@ void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint3
 
    CGuard::enterCS(m_BufLock);
    m_iCount += size;
+   m_iQueue += size;
    CGuard::leaveCS(m_BufLock);
 
+   /*
    m_iNextMsgNo ++;
    if (m_iNextMsgNo == CMsgNo::m_iMaxMsgNo)
       m_iNextMsgNo = 1;
+      */
 }
 
 int CSndBuffer::addBufferFromFile(fstream& ifs, int len)
@@ -272,10 +277,17 @@ int CSndBuffer::readData(char** data, const int offset, int32_t& msgno, int& msg
 
 Block* CSndBuffer::readCurrData()
 {
-   if (m_pCurrBlock == m_pLastBlock)
-      return NULL;
+   CGuard bufferguard(m_BufLock);
+   if (m_pCurrBlock == m_pLastBlock) {
+       if ( m_iQueue != 0 ) {
+           std::string error_code = "Transport protocol buffer empty with queue size " + std::to_string(m_iQueue);
+           throw std::runtime_error(error_code);
+       }
+       return NULL;
+   }
    Block* ret = m_pCurrBlock;
    m_pCurrBlock = m_pCurrBlock->m_pNext;
+   m_iQueue -= 1;
    return ret;
 }
 
@@ -350,6 +362,11 @@ void CSndBuffer::ackData(int new_ack)
 int CSndBuffer::getCurrBufSize() const
 {
    return m_iCount;
+}
+
+int CSndBuffer::getCurrQueueSize() const
+{
+    return m_iQueue;
 }
 
 void CSndBuffer::increase()

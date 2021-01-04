@@ -162,25 +162,14 @@ public:
 
    int getCurrBufSize() const;
 
+   int getCurrQueueSize() const;
+
 private:
    void increase();
 
 private:
    pthread_mutex_t m_BufLock;           // used to synchronize buffer operation
 
-   /*
-   struct Block
-   {
-      char* m_pcData;                   // pointer to the data block
-      int m_iLength;                    // length of the block
-
-      int32_t m_iMsgNo;                 // message number
-      uint64_t m_OriginTime;            // original request time
-      int m_iTTL;                       // time to live (milliseconds)
-
-      Block* m_pNext;                   // next block
-   } *m_pBlock, *m_pFirstBlock, *m_pCurrBlock, *m_pLastBlock;
-   */
    Block *m_pBlock, *m_pFirstBlock, *m_pCurrBlock, *m_pLastBlock;
 
    // m_pBlock:         The head pointer
@@ -201,6 +190,7 @@ private:
    int m_iMSS;                          // maximum seqment/packet size
 
    int m_iCount;			// number of used blocks
+   int m_iQueue;            // number of unsent and queued blocks
 
 private:
    CSndBuffer(const CSndBuffer&);

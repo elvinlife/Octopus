@@ -1832,12 +1832,12 @@ int CUDT::recv(UDTSOCKET u, char* buf, int len, int)
    }
 }
 
-int CUDT::sendmsg(UDTSOCKET u, const char* buf, int len, int ttl, bool inorder, uint32_t extra_field)
+int CUDT::sendmsg(UDTSOCKET u, const char* buf, int len, int msg_no, bool inorder, uint32_t extra_field, uint32_t max_queue)
 {
    try
    {
       CUDT* udt = s_UDTUnited.lookup(u);
-      return udt->sendmsg(buf, len, ttl, inorder, extra_field);
+      return udt->sendmsg(buf, len, msg_no, inorder, extra_field, max_queue);
    }
    catch (CUDTException e)
    {
@@ -2233,9 +2233,9 @@ int recv(UDTSOCKET u, char* buf, int len, int flags)
    return CUDT::recv(u, buf, len, flags);
 }
 
-int sendmsg(UDTSOCKET u, const char* buf, int len, int ttl, bool inorder, uint32_t extra_field)
+int sendmsg(UDTSOCKET u, const char* buf, int len, int msg_no, bool inorder, uint32_t extra_field, uint32_t max_queue)
 {
-   return CUDT::sendmsg(u, buf, len, ttl, inorder, extra_field);
+   return CUDT::sendmsg(u, buf, len, msg_no, inorder, extra_field, max_queue);
 }
 
 int recvmsg(UDTSOCKET u, char* buf, int len)

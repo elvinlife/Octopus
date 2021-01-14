@@ -119,7 +119,29 @@ CSndBuffer::~CSndBuffer()
    #endif
 }
 
-void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint32_t extra_field)
+void CSndBuffer::setDropFlag( int priority )
+{
+    Block* p = m_pCurrBlock;
+    bool begin_drop = false;
+    while (p != m_pLastBlock) {
+        // the beginning of one message
+        if ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) {
+            begin_drop = true;
+        }
+        if (begin_drop) {
+            int msg_priority = (p->m_iExtra & 0xe0000000) >> 29;
+            if ( priority <= msg_priority && !p->m_Drop ) {
+                p->m_Drop = true;
+                if ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) {
+                    fprintf( stderr, "drop_msg msg_no: %u\n", p->m_iMsgNo & 0x1fffffff );
+                }
+            }
+        }
+        p = p->m_pNext;
+    }
+}
+
+void CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, uint32_t extra_field)
 {
    int size = len / m_iMSS;
    if ((len % m_iMSS) != 0)
@@ -128,6 +150,12 @@ void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint3
    // dynamically increase sender buffer
    while (size + m_iCount >= m_iSize)
       increase();
+
+   CGuard::enterCS(m_BufLock);
+   if ( extra_field & 0x10000000 ) {
+       setDropFlag( (extra_field & 0xe0000000) >> 29 );
+   }
+   CGuard::leaveCS(m_BufLock);
 
    uint64_t time = CTimer::getTime();
    int32_t inorder = order;
@@ -144,7 +172,6 @@ void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint3
       s->m_iLength = pktlen;
 
       s->m_iExtra = extra_field;
-      //fprintf(stderr, "addBuffer, m_iExtra: %x, priority: %x, msgno: %x\n", s->m_iExtra, priority, m_iNextMsgNo );
 
       s->m_iMsgNo = m_iNextMsgNo | inorder;
       if (i == 0)
@@ -152,8 +179,9 @@ void CSndBuffer::addBuffer(const char* data, int len, int ttl, bool order, uint3
       if (i == size - 1)
          s->m_iMsgNo |= 0x40000000;
 
-      s->m_OriginTime = time;
-      s->m_iTTL = ttl;
+      s->m_OriginTime   = time;
+      s->m_Drop         = is_drop;
+      //s->m_iTTL = ttl;
 
       s = s->m_pNext;
    }
@@ -312,7 +340,7 @@ Block* CSndBuffer::readData( const int offset, int seq )
         }
         p = p->m_pNext;
     }
-    std::string error_code = "cannot find block with " + std::to_string(seq);
+    std::string error_code = "cannot find block: " + std::to_string(seq) + " first block: " + std::to_string(m_pFirstBlock->seq_);
     throw std::runtime_error(error_code);
 }
 
@@ -581,6 +609,12 @@ int CRcvBuffer::readMsg(char* data, int len)
 
    int rs = len;
    init_p = p;
+
+   fprintf( stderr, "readMsg msg_no: %d begin_seq: %d end_seq: %d\n",
+           m_pUnit[p]->m_Packet.m_iMsgNo & 0x1fffffff,
+           m_pUnit[p]->m_Packet.m_iSeqNo,
+           m_pUnit[q]->m_Packet.m_iSeqNo );
+
    while (p != (q + 1) % m_iSize)
    {
       int unitsize = m_pUnit[p]->m_Packet.getLength();

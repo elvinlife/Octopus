@@ -58,7 +58,8 @@ written by
 #include "md5.h"
 #include "common.h"
 
-bool CTimer::m_bUseMicroSecond = false;
+//bool CTimer::m_bUseMicroSecond = false;
+bool CTimer::m_bUseMicroSecond = true;
 uint64_t CTimer::s_ullCPUFrequency = CTimer::readCPUFrequency();
 #ifndef WIN32
    pthread_mutex_t CTimer::m_EventLock = PTHREAD_MUTEX_INITIALIZER;

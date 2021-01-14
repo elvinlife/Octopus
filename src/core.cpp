@@ -1332,7 +1332,15 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t e
    checkAppLimited();
 
    // insert the user buffer into the sending list
-   m_pSndBuffer->addBuffer(data, len, msttl, inorder, extra_field);
+   /*
+   int send_rate = m_dPacingRate > m_dBtlBw ? m_dPacingRate : m_dBtlBw;
+   int is_drop = 0;
+   if ( (uint32_t)(send_rate * 1024) < (extra_field & 0x0fffffff ) ) {
+       is_drop = 1;
+   }
+   m_pSndBuffer->addBuffer(data, len, is_drop, inorder, extra_field);
+   */
+   m_pSndBuffer->addBuffer(data, len, 0, inorder, extra_field);
 
    // insert this socket to the snd list if it is not on the list yet
    m_pSndQueue->m_pSndUList->update(this, false);
@@ -2342,7 +2350,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
 
        // this will wake up the m_pSndUList from sleep (sleep results from no pkt/congestion)
        // the lost packet (retransmission) should be sent out immediately
-       m_pSndQueue->m_pSndUList->update(this);
+       m_pSndQueue->m_pSndUList->update(this, false);
 
        CCUpdate();
        break;
@@ -2538,6 +2546,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    uint64_t entertime;
    CTimer::rdtsc(entertime);
+   uint64_t enter_ts = CTimer::getTime();
 
    if ((0 != m_ullTargetTime) && (entertime > m_ullTargetTime))
       m_ullTimeDiff += entertime - m_ullTargetTime;
@@ -2605,6 +2614,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       {
          Block* block = NULL;
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
+             /*
              int send_rate = m_dPacingRate > m_dBtlBw ? m_dPacingRate : m_dBtlBw;
              while ( (block = m_pSndBuffer->readCurrData()) != NULL ) {
                  if ( (block->m_iMsgNo & 0x1fffffff) == m_iSndCurrMsgNo )
@@ -2614,9 +2624,14 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
                      break;
                  }
              }
+             */
+             while ( (block = m_pSndBuffer->readCurrData()) != NULL ) {
+                if ( !block->m_Drop )
+                    break;
+             }
              if ( block ) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
-                m_pRateSample->onPktSent(block, CTimer::getTime() + (ts - entertime) / m_ullCPUFrequency );
+                m_pRateSample->onPktSent(block, enter_ts + (ts - entertime) / m_ullCPUFrequency );
              }
          }
          else {
@@ -2667,7 +2682,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stderr, "%s seq: %d  msg_no: %d  wildcard: %x  size: %d  SndCumuAck: %d  SndCurrSeq: %d  send_ts: %ldms\n",
+   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d send_ts: %ldms\n",
            send_pkt.c_str(),
            packet.m_iSeqNo,
            packet.getMsgNo(),
@@ -2675,7 +2690,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            packet.getLength() + CPacket::m_iPktHdrSize,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
-           (CTimer::getTime() +  (ts - entertime) / m_ullCPUFrequency) / 1000
+           (enter_ts +  (ts - entertime) / m_ullCPUFrequency) / 1000
            //duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count()
            );
 
@@ -3026,7 +3041,7 @@ void CUDT::checkTimers()
          m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
 
          // immediately restart transmission
-         m_pSndQueue->m_pSndUList->update(this);
+         m_pSndQueue->m_pSndUList->update(this, false);
       }
 
       ++ m_iEXPCount;

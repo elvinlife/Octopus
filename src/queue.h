@@ -179,7 +179,8 @@ public:
       // Returned value:
       //    1 if successfully retrieved, -1 if no packet found.
 
-   int pop(sockaddr*& addr, CPacket& pkt);
+   //int pop(sockaddr*& addr, CPacket& pkt);
+   uint64_t pop(sockaddr*& addr, CPacket& pkt);
 
       // Functionality:
       //    Remove UDT instance from the list.

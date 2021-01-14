@@ -49,7 +49,6 @@ written by
 
 struct Block
 {
-    static const uint32_t PRIORITY_MUSK = 0xefffffff;
     static const uint32_t PRIORITY_OFFSET = 29; 
     char* m_pcData;                   // pointer to the data block
     int m_iLength;                    // length of the block
@@ -59,9 +58,10 @@ struct Block
     uint32_t m_iExtra;
     uint64_t m_OriginTime;            // original request time
     int m_iTTL;                       // time to live (milliseconds)
+    bool    m_Drop;
 
     // for ratesample
-    int seq_;
+    int     seq_;
     uint64_t delivered_;
     uint64_t delivered_ts_;
     uint64_t first_sent_ts_;
@@ -87,6 +87,8 @@ public:
       //    3) [in] order: if the block should be delivered in order, for DGRAM only
       // Returned value:
       //    None.
+
+   void setDropFlag( int );
 
    void addBuffer(const char* data, int len, int ttl = -1, bool order = false, uint32_t extra_field = 0);
 

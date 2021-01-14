@@ -65,7 +65,7 @@ class CBBR: public CCC
 
         CBBR() 
             :btl_bw_ ( getThroughput(BBRMinPipeCwnd, BBRInitRTT) ),
-            rt_prop_( RTpropFilterLen ),
+            rt_prop_( RTpropFilterLen / 10 ),
             pacing_gain_( 1 ),
             cwnd_gain_( 1 ),
             btl_bw_filter_( BtlBWFilterLen, btl_bw_ ), 
@@ -122,25 +122,27 @@ class CBBR: public CCC
     protected:
         void updateModelAndState( Block* block, const RateSample* rs)
         {
+            updateRTprop( block );
             updateBtlBw( block, rs );
             checkCyclePhase( rs );
             checkFullPipe( rs );
             checkDrain( rs );
-            updateRTprop( block );
-            //checkProbeRTT( rs );
+            checkProbeRTT( rs );
         }
 
         void updateBtlBw( Block* block, const RateSample* rs)
         {
             updateRound( block, rs );
             // ratesample hasn't started yet
-            if ( rs->deliveryRate() == 0 )
-                return;
+            float delivery_rate = rs->deliveryRate();
+            if ( delivery_rate < getThroughput(BBRMinPipeCwnd, BBRInitRTT) ) {
+                delivery_rate = getThroughput(BBRMinPipeCwnd, BBRInitRTT);
+            }
             if ( rs->deliveryRate() >= btl_bw_
                     || !rs->isAppLimited() ) {
                 btl_bw_ = btl_bw_filter_.update(
                         round_count_,
-                        rs->deliveryRate() );
+                        delivery_rate );
             }
         }
 
@@ -237,6 +239,7 @@ class CBBR: public CCC
 
         void updateRTprop(Block* block)
         {
+            // have to skip the first packet because of udt limitation
             uint64_t rtt = CTimer::getTime() - block->sent_ts_;
             rtprop_expired_ = CTimer::getTime() > 
                 (rtprop_stamp_ + RTpropFilterLen);
@@ -264,7 +267,7 @@ class CBBR: public CCC
 
         void checkProbeRTT( const RateSample* rs )
         {
-            if ( state_ != ProbeRTT &&
+            if ( state_ == ProbeBW &&
                     rtprop_expired_ &&
                     !idle_restart_ ) {
                 enterProbeRTT();
@@ -337,6 +340,9 @@ class CBBR: public CCC
         void updateTargetCwnd()
         {
             m_dCWndSize = getBDP( cwnd_gain_ );
+            if ( m_dCWndSize < BBRMinPipeCwnd ) {
+                m_dCWndSize = BBRMinPipeCwnd;
+            }
         }
 
         void setCwndForProbeRTT()
@@ -400,9 +406,9 @@ class CBBR: public CCC
         static const int BBRGainCycleLen    = 8;
         static const int BtlBWFilterLen     = 10;
 
-        static const uint64_t RTpropFilterLen   = 10000000;
+        static const uint64_t RTpropFilterLen   = 400000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
-        static const int BBRMinPipeCwnd         = 4;
+        static const int BBRMinPipeCwnd         = 2;
         static const int BBRInitRTT             = 100000;
 
         static const int PacketMTU = 1500;

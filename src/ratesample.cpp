@@ -34,20 +34,12 @@ void RateSample::onAck(Block* block, bool real_ack)
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ * 8;
-        /*
-        fprintf(stderr, "delivery_rate: %fMbps, sample_delivered: %ldbytes, send_elapsed: %ldms, ack_elapsed: %ldms\n", 
+        fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldByte sent_ts: %ldms ack_elapsed_: %ldms inflight: %d\n", 
                 delivery_rate_, 
                 sample_delivered,
-                send_elapsed_ / 1000, 
-                ack_elapsed_ / 1000
-                );
-                */
-        fprintf(stderr, "delivery_rate: %.2fMbps  sample_delivered: %ldByte  cumu_delivered_ts_: %ldms  sent_ts: %ldms  ack_elapsed_: %ldms\n", 
-                delivery_rate_, 
-                sample_delivered,
-                cumu_delivered_ts_ / 1000,
                 block->sent_ts_ / 1000,
-                ack_elapsed_ / 1000
+                ack_elapsed_ / 1000,
+                pkts_in_flight_
                 );
     }
     block->delivered_ts_ = 0;
@@ -76,9 +68,13 @@ void RateSample::updateRateSample(Block *block, bool real_ack)
 {
     if (block->delivered_ts_ == 0)
         return;
+    // only update the ack_elapsed if the cumu_delivered of the acked block increases to avoid overestimation
+    //
+    bool is_valid = block->delivered_ > prior_delivered_
+        || CTimer::getTime() > cumu_delivered_ts_ + 500000;
     cumu_delivered_ += (real_ack ? PacketMTU : 0);
     cumu_delivered_ts_ = CTimer::getTime();
-    if (block->delivered_ > prior_delivered_) {
+    if ( is_valid ) {
         prior_delivered_ = block->delivered_;
         prior_delivered_ts_ = block->delivered_ts_;
         //send_elapsed_ = block->sent_ts_ - block->first_sent_ts_;

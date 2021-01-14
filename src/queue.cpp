@@ -303,28 +303,28 @@ void CSndUList::update(const CUDT* u, bool reschedule)
    insert_(1, u);
 }
 
-int CSndUList::pop(sockaddr*& addr, CPacket& pkt)
+uint64_t CSndUList::pop(sockaddr*& addr, CPacket& pkt)
 {
    CGuard listguard(m_ListLock);
 
    if (-1 == m_iLastEntry)
-      return -1;
+      return 0;
 
    // no pop until the next schedulled time
    uint64_t ts;
    CTimer::rdtsc(ts);
    if (ts < m_pHeap[0]->m_llTimeStamp)
-      return -1;
+      return 0;
 
    CUDT* u = m_pHeap[0]->m_pUDT;
    remove_(u);
 
    if (!u->m_bConnected || u->m_bBroken)
-      return -1;
+      return 0;
 
    // pack a packet from the socket
    if (u->packData(pkt, ts) <= 0)
-      return -1;
+      return 0;
 
    addr = u->m_pPeerAddr;
 
@@ -332,7 +332,7 @@ int CSndUList::pop(sockaddr*& addr, CPacket& pkt)
    if (ts > 0)
       insert_(ts, u);
 
-   return 1;
+   return ts;
 }
 
 void CSndUList::remove(const CUDT* u)
@@ -524,6 +524,7 @@ void CSndQueue::init(CChannel* c, CTimer* t)
 
       if (ts > 0)
       {
+          /*
          // wait until next processing time of the first socket on the list
          uint64_t currtime;
          CTimer::rdtsc(currtime);
@@ -535,8 +536,24 @@ void CSndQueue::init(CChannel* c, CTimer* t)
          CPacket pkt;
          if (self->m_pSndUList->pop(addr, pkt) < 0)
             continue;
-         //fprintf(stderr, "send_pkt: seq_id %d msg_id %d ts %d\n",
-         //        pkt.m_iSeqNo, pkt.getMsgSeq(), pkt.m_iTimeStamp );
+         fprintf(stderr, "send_pkt seq_id: %d msg_id: %d ts: %ld real_time: %ld\n",
+                 pkt.m_iSeqNo, pkt.m_iMsgNo, ts, CTimer::getTime() );
+
+         self->m_pChannel->sendto(addr, pkt);
+         */
+         // it is time to send the next pkt
+         sockaddr* addr;
+         CPacket pkt;
+         if ( ( ts = self->m_pSndUList->pop(addr, pkt) ) == 0 )
+            continue;
+
+         uint64_t currtime;
+         CTimer::rdtsc(currtime);
+         if (currtime < ts)
+            self->m_pTimer->sleepto(ts);
+
+         //fprintf(stderr, "send_pkt seq_id: %d msg_id: %d ts: %ld real_time: %ld\n",
+         //        pkt.m_iSeqNo, pkt.m_iMsgNo, ts, CTimer::getTime() );
 
          self->m_pChannel->sendto(addr, pkt);
       }

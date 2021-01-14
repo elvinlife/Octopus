@@ -219,11 +219,17 @@ int main(int argc, char* argv[])
     uint64_t    frame_gap = 33;
     int         bbr_rate = 0; 
     int         key_trace = 0;
-    int smallest_key = 1 << 20;
+    int         smallest_key = 1 << 20;
+    const uint32_t PREEMPT_MUSK = 0x10000000;
     UDT::TRACEINFO perf;
 
     while (true) {
         if (frame_no % gop_size == 0) {
+            if (UDT::ERROR == UDT::perfmon(client, &perf))
+            {
+                cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
+                break;
+            }
             gop_no += 1;
             bbr_rate = perf.pacingRate;
             key_trace = 0;
@@ -241,12 +247,6 @@ int main(int argc, char* argv[])
         uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
         uint64_t ts = ts_begin;
 
-        if (UDT::ERROR == UDT::perfmon(client, &perf))
-        {
-            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
-            break;
-        }
-
         for (int i = 0; i < num_layers; ++i) {
             int msg_no = frame_no * num_layers + i;
             msg = trace_arrays[key_trace][ msg_no % trace_arrays[key_trace].size() ];
@@ -254,6 +254,9 @@ int main(int argc, char* argv[])
             uint32_t wildcard = (msg.layer_id_+1) << 29 | msg.rate_;
             if ( i == 0 )
                 wildcard = (msg.layer_id_+1) << 29;
+            if ( frame_no % gop_size == 0 && i == 0) {
+                wildcard = wildcard | PREEMPT_MUSK;
+            }
 
             std::string msg_payload( msg.size_, 'a' );
             int ss = 0;
@@ -262,6 +265,7 @@ int main(int argc, char* argv[])
                 cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
                 exit( -1 );
             }
+
             if ( ss != msg.size_ ) {
                 fprintf(stderr, "Error, sendmsg size mismatch: %u, ss:%u\n", msg.size_, ss);
                 exit(0);

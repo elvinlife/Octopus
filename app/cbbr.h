@@ -2,6 +2,8 @@
 #include <ccc.h>
 #include <cstdio>
 #include "common.h"
+#include <cassert>
+#include <string>
 
 enum BBRState {
     Startup,
@@ -12,49 +14,86 @@ enum BBRState {
 
 struct Filter
 {
-    const int window_len_;
-    int first_round_;
-    int last_round_;    // inclusive
-    double *value_array_ = NULL;
+private:
+    const int       window_capacity_ = 100;
+    int             window_len_;
+    int    first_round_;
+    int    last_round_;    // inclusive
+    double          *rate_array_ = NULL;
     
+public:
     Filter( int window_len, float init_value )
         : window_len_( window_len ),
         first_round_( 0 ),
         last_round_( 0 ),
-        value_array_( new double[window_len+1] ) {
-            value_array_[0] = init_value;
+        rate_array_( new double[window_capacity_] ) {
+            for ( int i = 0; i < window_capacity_; ++i )
+                rate_array_[i] = 0;
+            rate_array_[0] = init_value;
         }
     
-    ~Filter() { delete value_array_; }
+    ~Filter() { delete [] rate_array_; }
     
     double update( int round, double value )
     {
-        double max = -1;
+        double max = 0;
         // reset those skipped rounds
         if (round < last_round_)
             goto exit;
         // clear the outdated data
+        last_round_ = round;
         if (first_round_ <= round - window_len_ ) {
             for (int j = first_round_; j <= round - window_len_; ++j) {
-                value_array_[ j % window_len_ ] = -1;
+                rate_array_[ j % window_len_ ] = 0;
             }
             first_round_ = last_round_ - window_len_ + 1;
         }
-        if ( value > value_array_[ round % window_len_ ] ) {
-            value_array_[ round % window_len_ ] = value;
+        if ( value > rate_array_[ round % window_len_ ] ) {
+            rate_array_[ round % window_len_ ] = value;
         }
-        last_round_ = round;
 exit:
         for (int i = first_round_; i <= last_round_; ++i)
-            if (max < value_array_[i % window_len_])
-                max = value_array_[i % window_len_];
+            if (max < rate_array_[i % window_len_])
+                max = rate_array_[i % window_len_];
+        if ( first_round_ + window_len_ <= last_round_ ) {
+            std::string error_code = "first_round: " + std::to_string(first_round_)
+                + " last_round: " + std::to_string(last_round_)
+                + " round: " + std::to_string(round)
+                + " window_len: " + std::to_string(window_len_);
+            throw std::runtime_error( error_code );
+        }
+        assert( max != 0 );
         return max;
     }
 
-    void clear()
+    void clear( float init_value )
     {
         first_round_ = 0;
         last_round_ = 0;
+        for ( int i = 0; i < window_len_; ++i ) {
+            rate_array_[i] = 0;
+        }
+        rate_array_[0] = init_value; 
+    }
+
+    void setWndLen( int len )
+    {
+        double tmp_array[ window_capacity_ ];
+        for ( int i = 0; i < window_capacity_; ++i ) {
+            tmp_array[i] = 0;
+        }
+        for ( int i = first_round_; i <= last_round_; ++i ) {
+            tmp_array[ i % len ] = rate_array_[ i % window_len_ ]; 
+        }
+        for ( int i = 0; i < window_capacity_; ++i ) {
+            rate_array_[i] = tmp_array[i];
+        }
+        window_len_ = len;
+    }
+
+    int getWndLen()
+    {
+        return window_len_;
     }
 };
 
@@ -72,9 +111,7 @@ class CBBR: public CCC
             rtprop_stamp_( CTimer::getTime() ),
             probe_rtt_done_stamp_( 0 ),
             probe_rtt_round_done_( false ),
-            prior_cwnd_( 0 ),
-            packet_conservation_( false ),
-            idle_restart_( false ) {
+            prior_cwnd_( 0 ) {
                 initRoundCounting();
                 initFullPipe();
                 initPacingRate();
@@ -110,11 +147,12 @@ class CBBR: public CCC
 
         virtual void onTimeout () override
         {
-            btl_bw_filter_.clear();
             round_start_ = false;
             round_count_ = 0;
+            next_round_stamp_ = CTimer::getTime(); 
             initFullPipe();
-            btl_bw_ = pacing_rate_ = getThroughput(BBRMinPipeCwnd, BBRInitRTT);
+            btl_bw_ = pacing_rate_ = getThroughput(BBRMinPipeCwnd, rt_prop_);
+            btl_bw_filter_.clear( btl_bw_ );
             enterStartup();
             updateControlParameters();
         }
@@ -138,12 +176,12 @@ class CBBR: public CCC
             if ( delivery_rate < getThroughput(BBRMinPipeCwnd, BBRInitRTT) ) {
                 delivery_rate = getThroughput(BBRMinPipeCwnd, BBRInitRTT);
             }
-            if ( rs->deliveryRate() >= btl_bw_
-                    || !rs->isAppLimited() ) {
+            //if ( rs->deliveryRate() >= btl_bw_
+            //        || !rs->isAppLimited() ) {
                 btl_bw_ = btl_bw_filter_.update(
                         round_count_,
                         delivery_rate );
-            }
+            //}
         }
 
         /*
@@ -164,9 +202,9 @@ class CBBR: public CCC
         void updateRound( Block* block, const RateSample* rs)
         {
             uint64_t now = CTimer::getTime();
-            if (now > next_round_delivered_) {
-                round_count_ += ( (now - next_round_delivered_) / rt_prop_ + 1 );
-                next_round_delivered_ = now + rt_prop_;
+            if (now > next_round_stamp_) {
+                round_count_ += ( ( now - next_round_stamp_ ) / rt_prop_ + 1 );
+                next_round_stamp_ = now + rt_prop_;
                 round_start_ = true;
             }
             else
@@ -204,18 +242,10 @@ class CBBR: public CCC
             pacing_gain_ = PacingGainCycle[ cycle_index_ ];
         }
 
-        void handleRestartFromIdle( const RateSample* rs )
-        {
-            if ( rs->pktsInFlight() == 0 && rs->isAppLimited() ) {
-                idle_restart_ = true;
-                if (state_ == ProbeBW)
-                    setPacingRateWithGain(1);
-            }
-        }
-
         void checkFullPipe( const RateSample* rs)
         {
-            if ( filled_pipe_ || !round_start_ || rs->isAppLimited() )
+            //if ( filled_pipe_ || !round_start_ || rs->isAppLimited() )
+            if ( filled_pipe_ || !round_start_ )
                 return;
             if ( btl_bw_ >= full_bw_ * 1.25 ) {
                 full_bw_ = btl_bw_;
@@ -245,9 +275,14 @@ class CBBR: public CCC
                 (rtprop_stamp_ + RTpropFilterLen);
             if ( rtt >= 0 &&
                     (rtt <= rt_prop_ || rtprop_expired_) ) {
-                fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", rtt, block->seq_);
                 rt_prop_ = rtt;
+                setRTO( 3 * rt_prop_ );
                 rtprop_stamp_ = CTimer::getTime();
+                if ( btl_bw_filter_.getWndLen() * rt_prop_ < BtlBWFilterMinWnd ) {
+                    btl_bw_filter_.setWndLen( BtlBWFilterMinWnd / rt_prop_ );
+                }
+                fprintf( stderr, "bbr_update_rtt, rt_prop: %ld seq: %d btl_filter_wnd: %d\n",
+                        rtt, block->seq_, btl_bw_filter_.getWndLen() );
             }
         }
 
@@ -268,15 +303,13 @@ class CBBR: public CCC
         void checkProbeRTT( const RateSample* rs )
         {
             if ( state_ == ProbeBW &&
-                    rtprop_expired_ &&
-                    !idle_restart_ ) {
+                    rtprop_expired_ ) {
                 enterProbeRTT();
                 probe_rtt_done_stamp_ = 0;
             }
             if ( state_ == ProbeRTT ) {
                 handleProbeRTT( rs );
             }
-            idle_restart_ = false;
         }
 
         void handleProbeRTT( const RateSample* rs )
@@ -285,7 +318,6 @@ class CBBR: public CCC
                     rs->pktsInFlight() <= BBRMinPipeCwnd) {
                 probe_rtt_done_stamp_ = CTimer::getTime() + ProbeRTTDuration;
                 probe_rtt_round_done_ = false;
-                next_round_delivered_ = cumu_delivered_;
             }
             else if ( probe_rtt_done_stamp_ != 0 ) {
                 if ( round_start_ ) {
@@ -311,13 +343,14 @@ class CBBR: public CCC
             m_dBtlBw = btl_bw_;
             // set cwnd
             setCwnd();
-            fprintf(stderr, "bbr_status rate: %.2f  cwnd: %.2f  btl_bw: %.2f  rt_prop: %ld  pacing_gain_: %.2f  round: %d  full_bw_cnt: %d  ts: %ldms\n",
+            fprintf(stderr, "bbr_status rate: %.2f  cwnd: %.2f  btl_bw: %.2f  rt_prop: %ld  pacing_gain_: %.2f  round: %d  round_start: %d  full_bw_cnt: %d  ts: %ldms\n",
                     pacing_rate_,
                     m_dCWndSize,
                     btl_bw_,
                     rt_prop_,
                     pacing_gain_,
                     round_count_,
+                    round_start_ ? 1 : 0,
                     full_bw_count_,
                     CTimer::getTime() / 1000
                     );
@@ -405,6 +438,7 @@ class CBBR: public CCC
         static constexpr double BBRHighGain = 2.89;
         static const int BBRGainCycleLen    = 8;
         static const int BtlBWFilterLen     = 10;
+        static const int BtlBWFilterMinWnd  = 600000;
 
         static const uint64_t RTpropFilterLen   = 400000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
@@ -426,12 +460,13 @@ class CBBR: public CCC
         // round related
         uint64_t    cumu_delivered_;
         uint64_t    next_round_delivered_;
+        uint64_t    next_round_stamp_;
         int         round_count_; 
         bool        round_start_;
 
         // Startup/Drain related
         bool        filled_pipe_;
-        double       full_bw_;
+        double      full_bw_;
         int         full_bw_count_;
 
         // ProbeBW related
@@ -444,8 +479,4 @@ class CBBR: public CCC
         uint64_t    probe_rtt_done_stamp_;
         bool        probe_rtt_round_done_;
         double      prior_cwnd_;
-
-        // unclear
-        bool        packet_conservation_;
-        bool        idle_restart_;
 };

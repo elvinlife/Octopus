@@ -2682,7 +2682,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d send_ts: %ldms\n",
+   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d SndHighSeq: %d send_ts: %ldms\n",
            send_pkt.c_str(),
            packet.m_iSeqNo,
            packet.getMsgNo(),
@@ -2690,6 +2690,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            packet.getLength() + CPacket::m_iPktHdrSize,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
+           m_iSndHighSeqNo,
            (enter_ts +  (ts - entertime) / m_ullCPUFrequency) / 1000
            //duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count()
            );
@@ -2996,7 +2997,8 @@ void CUDT::checkTimers()
    CTimer::rdtsc(currtime);
 
    uint64_t next_exp_time;
-   // temporarily set timeout to 400ms
+   // temporarily set timeout to 400ms(3RTT)
+   //next_exp_time = m_ullLastRspTime + m_pCC->m_iRTO * m_ullCPUFrequency;
    next_exp_time = m_ullLastRspTime + 1000000 * m_ullCPUFrequency;
 
    if (currtime > next_exp_time)

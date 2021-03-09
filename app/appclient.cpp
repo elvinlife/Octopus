@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
    for (int i = 0; i < 1000000; i ++)
    {
        int ss;
-       if (UDT::ERROR == (ss = UDT::sendmsg(client, data, size, (1<<20), 1, (uint32_t)i)))
+       if (UDT::ERROR == (ss = UDT::sendmsg(client, data, size, (1<<20), 1, (uint32_t)0)))
        {
            cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
            break;

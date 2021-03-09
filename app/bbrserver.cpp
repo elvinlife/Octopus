@@ -148,14 +148,11 @@ DWORD WINAPI recvdata(LPVOID usocket)
        PacketHeader header(data);
 
        int64_t ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-       fprintf( stdout, "recv_msg msg_no: %d size: %d wildcard: %x ts_recv: %lu frame_no: %d layer_id: %d\n",
+       fprintf( stdout, "recv_msg msg_no: %d size: %d wildcard: %x ts_recv: %lu\n",
                header.msgno(),
                ss,
                header.wildcard(),
-               ts,
-               header.msgno() / 3,
-               header.msgno() % 3
-               );
+               ts );
    }
 
    delete [] data;

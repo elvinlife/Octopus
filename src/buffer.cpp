@@ -133,7 +133,8 @@ void CSndBuffer::setDropFlag( int priority )
             if ( priority <= msg_priority && !p->m_Drop ) {
                 p->m_Drop = true;
                 if ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) {
-                    fprintf( stderr, "drop_msg msg_no: %u\n", p->m_iMsgNo & 0x1fffffff );
+                    //fprintf( stderr, "drop_msg msg_no: %u\n", p->m_iMsgNo & 0x1fffffff );
+                    fprintf( stdout, "drop_msg msg_no: %u\n", p->m_iMsgNo & 0x1fffffff );
                 }
             }
         }

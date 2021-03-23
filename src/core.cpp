@@ -2562,18 +2562,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
        m_ullTimeDiff = 0;
    }
 
-   /*
-   fprintf(stderr, "packData, cwnd:%.2f, rwnd: %d, SndCumuAck: %d, SndCurrSeq: %d, SndHighSeq: %d, scb_next: %d, ts: %ldus\n", 
-           m_dCongestionWindow,
-           m_iFlowWindowSize,
-           m_iSndLastDataAck,
-           m_iSndCurrSeqNo,
-           m_iSndHighSeqNo,
-           m_pScoreBoard->getNextRetran(),
-           CTimer::getTime()
-           );
-           */
-    CCUpdate();
+   CCUpdate();
 
    string send_pkt("send_pkt");
 
@@ -2666,9 +2655,12 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       }
       else
       {
+          /* 
+           * clear them will affect the pacing rate
          m_ullTargetTime = 0;
          m_ullTimeDiff = 0;
          ts = 0;
+         */
          return 0;
       }
 

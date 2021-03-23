@@ -104,7 +104,7 @@ class CBBR: public CCC
 
         CBBR() 
             :btl_bw_ ( getThroughput(BBRMinPipeCwnd, BBRInitRTT) ),
-            rt_prop_( RTpropFilterLen / 10 ),
+            rt_prop_( 200000 ),
             pacing_gain_( 1 ),
             cwnd_gain_( 1 ),
             btl_bw_filter_( BtlBWFilterLen, btl_bw_ ), 
@@ -343,7 +343,7 @@ class CBBR: public CCC
             m_dBtlBw = btl_bw_;
             // set cwnd
             setCwnd();
-            fprintf(stderr, "bbr_status rate: %.2f  cwnd: %.2f  btl_bw: %.2f  rt_prop: %ld  pacing_gain_: %.2f  round: %d  round_start: %d  full_bw_cnt: %d  ts: %ldms\n",
+            fprintf(stderr, "bbr_status rate: %.2f cwnd: %.2f btl_bw: %.2f rt_prop: %ld pacing_gain_: %.2f round: %d round_start: %d full_bw_cnt: %d ts: %ld ms\n",
                     pacing_rate_,
                     m_dCWndSize,
                     btl_bw_,

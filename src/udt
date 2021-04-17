@@ -93,7 +93,7 @@ written by
    #define UDT_API __attribute__ ((visibility("default")))
 #endif
 
-#define NO_BUSY_WAITING
+//#define NO_BUSY_WAITING
 
 #ifdef WIN32
    #ifndef __MINGW__

@@ -162,6 +162,7 @@ class CBBR: public CCC
         {
             updateRTprop( block );
             updateBtlBw( block, rs );
+            updateAckAggregation( rs );
             checkCyclePhase( rs );
             checkFullPipe( rs );
             checkDrain( rs );
@@ -173,15 +174,62 @@ class CBBR: public CCC
             updateRound( block, rs );
             // ratesample hasn't started yet
             float delivery_rate = rs->deliveryRate();
-            if ( delivery_rate < getThroughput(BBRMinPipeCwnd, BBRInitRTT) ) {
-                delivery_rate = getThroughput(BBRMinPipeCwnd, BBRInitRTT);
+            if ( delivery_rate < getThroughput(BBRMinPipeCwnd, rt_prop_) ) {
+                delivery_rate = getThroughput(BBRMinPipeCwnd, rt_prop_);
             }
-            //if ( rs->deliveryRate() >= btl_bw_
-            //        || !rs->isAppLimited() ) {
+            if ( rs->deliveryRate() >= btl_bw_
+                    || !rs->isAppLimited() ) {
                 btl_bw_ = btl_bw_filter_.update(
                         round_count_,
                         delivery_rate );
-            //}
+            }
+        }
+
+        void updateAckAggregation( const RateSample* rs )
+        {
+            if ( rs->cumuDelivered() <= 0 )
+                return;
+            if ( round_start_ ) {
+               // last k-2k (5-10) epoches 
+               extra_acked_win_rtts_ = extra_acked_win_rtts_ + 1;
+               if ( extra_acked_win_rtts_ >= ExtraAckedMaxRtts ) {
+                   extra_acked_win_rtts_ = 0;
+                   extra_acked_win_idx_ = extra_acked_win_idx_ ? 0 : 1;
+                   extra_acked_[extra_acked_win_idx_] = 0;
+               }
+            }
+            int32_t epoch_us = rs->delivered_mstamp_ - ack_epoch_mstamp_; 
+            // time a ratio
+            int expected_acked = btl_bw_ * epoch_us * Ratio / PacketMTU;
+            if ( expected_acked >= ack_epoch_acked_ ||
+                    ( (ack_epoch_acked_ + rs->acked_sacked_) >= AckEpochResetThresh ) ) {
+                ack_epoch_acked_ = 0;
+                ack_epoch_mstamp_ = rs->delivered_mstamp_;
+                expected_acked = 0;
+            }
+            ack_epoch_acked_ = ack_epoch_acked_ + rs->acked_sacked_;
+            if ( ack_epoch_acked_ > 0xFFFFF ) {
+                ack_epoch_acked_ = 0xFFFFF;
+            }
+            int extra_acked = ack_epoch_acked_ - expected_acked;
+            extra_acked = ( extra_acked < m_dCWndSize ) ? extra_acked : m_dCWndSize; 
+            if( extra_acked > extra_acked_[extra_acked_win_idx_] )
+                extra_acked_[extra_acked_win_idx_] = extra_acked;
+        }
+
+        int ackAggregationCwnd()
+        {
+            int aggr_cwnd = 0;
+            if ( filled_pipe_ ) {
+                int max_aggr_cwnd = btl_bw_ * 100000 * Ratio / PacketMTU;
+                aggr_cwnd = extra_acked_[0];
+                if ( aggr_cwnd < extra_acked_[1] )
+                    aggr_cwnd = extra_acked_[1];
+                if ( aggr_cwnd > max_aggr_cwnd ) {
+                    aggr_cwnd = max_aggr_cwnd;
+                }
+            }
+            return aggr_cwnd;
         }
 
         /*
@@ -214,13 +262,13 @@ class CBBR: public CCC
         void checkCyclePhase( const RateSample* rs)
         {
             if ( state_ == ProbeBW && isNextCyclePhase(rs) ) {
-                advanceCyclePhase();
+                advanceCyclePhase( rs );
             }
         }
 
         bool isNextCyclePhase( const RateSample* rs)
         {
-            bool is_next_cycle = ( CTimer::getTime() - cycle_stamp_ ) > rt_prop_;
+            bool is_next_cycle = ( rs->delivered_mstamp_ - cycle_stamp_ ) > rt_prop_;
             if (pacing_gain_ == 1.0)
                 return is_next_cycle;
             if (pacing_gain_ > 1.0) {
@@ -235,9 +283,9 @@ class CBBR: public CCC
             }
         }
 
-        void advanceCyclePhase()
+        void advanceCyclePhase( const RateSample* rs)
         {
-            cycle_stamp_ = CTimer::getTime();
+            cycle_stamp_ = rs->delivered_mstamp_;
             cycle_index_ = ( cycle_index_ + 1 ) % BBRGainCycleLen;
             pacing_gain_ = PacingGainCycle[ cycle_index_ ];
         }
@@ -276,8 +324,9 @@ class CBBR: public CCC
             if ( rtt >= 0 &&
                     (rtt <= rt_prop_ || rtprop_expired_) ) {
                 rt_prop_ = rtt;
-                setRTO( 3 * rt_prop_ );
+                //setRTO( 3 * rt_prop_ );
                 rtprop_stamp_ = CTimer::getTime();
+                // increase the btl_bw_filter window if rtt is low
                 if ( btl_bw_filter_.getWndLen() * rt_prop_ < BtlBWFilterMinWnd ) {
                     btl_bw_filter_.setWndLen( BtlBWFilterMinWnd / rt_prop_ );
                 }
@@ -285,20 +334,6 @@ class CBBR: public CCC
                         rtt, block->seq_, btl_bw_filter_.getWndLen() );
             }
         }
-
-        /*
-        void updateRTprop(Block* block)
-        {
-            uint64_t rtt = CTimer::getTime() - block->sent_ts_;
-            rtprop_expired_ = CTimer::getTime() > 
-                (rtprop_stamp_ + RTpropFilterLen);
-            if ( rtt >= 0 && rtt <= rt_prop_ ) {
-                //fprintf(stderr, "bbr_update_rtt, rt_prop: %ld seq:%d\n", rtt, block->seq_);
-                rt_prop_ = rtt;
-                rtprop_stamp_ = CTimer::getTime();
-            }
-        }
-        */
 
         void checkProbeRTT( const RateSample* rs )
         {
@@ -339,13 +374,16 @@ class CBBR: public CCC
         {
             // set pacing rate
             setPacingRateWithGain( pacing_gain_ );
-            m_dPktSndPeriod = (PacketMTU * 8.0) / pacing_rate_;
-            m_dBtlBw = btl_bw_;
+            // set Quantum
+            setSendQuantum();
             // set cwnd
             setCwnd();
-            fprintf(stderr, "bbr_status rate: %.2f cwnd: %.2f btl_bw: %.2f rt_prop: %ld pacing_gain_: %.2f round: %d round_start: %d full_bw_cnt: %d ts: %ld ms\n",
+            m_dBtlBw = btl_bw_;
+            m_dPktSndPeriod = PacketMTU / pacing_rate_ / Ratio;
+            fprintf(stderr, "bbr_status rate: %.2f cwnd: %.2f ack_aggr_cwnd: %d btl_bw: %.2f rt_prop: %ld pacing_gain_: %.2f round: %d round_start: %d full_bw_cnt: %d ts: %ld ms\n",
                     pacing_rate_,
                     m_dCWndSize,
+                    ackAggregationCwnd(),
                     btl_bw_,
                     rt_prop_,
                     pacing_gain_,
@@ -364,6 +402,16 @@ class CBBR: public CCC
             } 
         }
 
+        void setSendQuantum()
+        {
+            if ( pacing_rate_ < 12 )
+                send_quantum_ = 1;
+            else if ( pacing_rate_ < 24 )
+                send_quantum_ = 2;
+            else
+                send_quantum_ = (pacing_rate_ / 12.0) > 43 ? 43 : (pacing_rate_ / 12.0);
+        }
+
         void setCwnd()
         {
             updateTargetCwnd();
@@ -372,7 +420,10 @@ class CBBR: public CCC
 
         void updateTargetCwnd()
         {
-            m_dCWndSize = getBDP( cwnd_gain_ );
+            m_dCWndSize = getBDP( cwnd_gain_ ) + ackAggregationCwnd();
+            m_dCWndSize += 3 * send_quantum_;
+            if ( state_ == ProbeBW && cycle_index_ == 0 )
+                m_dCWndSize += 2;
             if ( m_dCWndSize < BBRMinPipeCwnd ) {
                 m_dCWndSize = BBRMinPipeCwnd;
             }
@@ -388,13 +439,13 @@ class CBBR: public CCC
 
         inline double getBDP(double gain)
         {
-            double estimated_bdp = btl_bw_ * rt_prop_ / (8 * PacketMTU);
+            double estimated_bdp = btl_bw_ * rt_prop_ * Ratio / PacketMTU;
             return estimated_bdp * gain;
         }
 
         inline double getThroughput(double cwnd, int time)
         {
-            return cwnd * 8 * PacketMTU / time;
+            return cwnd * PacketMTU / time / Ratio;
         }
 
         inline void enterStartup()
@@ -412,7 +463,7 @@ class CBBR: public CCC
             m_iBBRMode = 2;
             state_ = Drain;
             pacing_gain_ = 1 / BBRHighGain;
-            cwnd_gain_ = 1;
+            cwnd_gain_ = BBRHighGain;
         }
 
         inline void enterProbeBW()
@@ -420,10 +471,10 @@ class CBBR: public CCC
             fprintf(stderr, "enterProbeBW\n");
             m_iBBRMode = 3;
             state_ = ProbeBW;
-            pacing_gain_ = 1;
+            cycle_index_ = 0;
+            cycle_stamp_ = CTimer::getTime();
+            pacing_gain_ = PacingGainCycle[cycle_index_];
             cwnd_gain_ = 2;
-            cycle_index_ = BBRGainCycleLen - 1;
-            advanceCyclePhase();
         }
 
         inline void enterProbeRTT()
@@ -440,22 +491,25 @@ class CBBR: public CCC
         static const int BtlBWFilterLen     = 10;
         static const int BtlBWFilterMinWnd  = 600000;
 
-        static const uint64_t RTpropFilterLen   = 400000000;
+        static const uint64_t RTpropFilterLen   = 10000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
-        static const int BBRMinPipeCwnd         = 2;
+        static const int BBRMinPipeCwnd         = 4;
         static const int BBRInitRTT             = 100000;
-
-        static const int PacketMTU = 1500;
+        static const int PacketMTU              = 1500;
+        static const int AckEpochResetThresh    = 1 << 20;
+        static const int ExtraAckedMaxRtts      = 5;
+        static constexpr double Ratio               = 0.131072;// 1Mbps = 0.131072B/us
 
         // important states
         double PacingGainCycle[8]   = {1.25, 0.75, 1, 1, 1, 1, 1, 1};
         BBRState    state_; 
-        double       btl_bw_;            // unit: Mbps
-        uint64_t     rt_prop_;           // unit: us
-        double       pacing_gain_;
-        double       cwnd_gain_;
-        double       pacing_rate_;
-        Filter       btl_bw_filter_;
+        double      btl_bw_;            // unit: Mbps
+        uint64_t    rt_prop_;           // unit: us
+        double      pacing_gain_;
+        double      cwnd_gain_;
+        double      pacing_rate_;       // unit: Mbps
+        int         send_quantum_;
+        Filter      btl_bw_filter_;
 
         // round related
         uint64_t    cumu_delivered_;
@@ -479,4 +533,11 @@ class CBBR: public CCC
         uint64_t    probe_rtt_done_stamp_;
         bool        probe_rtt_round_done_;
         double      prior_cwnd_;
+
+        // ack aggregation related
+        uint64_t    ack_epoch_mstamp_; 
+        int         ack_epoch_acked_;
+        int         extra_acked_[2];
+        int         extra_acked_win_idx_;
+        int         extra_acked_win_rtts_;
 };

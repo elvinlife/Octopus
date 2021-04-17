@@ -2597,7 +2597,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       // If no loss, pack a new packet.
       // check congestion/flow window limet
       int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
-      //int cwnd = m_iFlowWindowSize;
 
       if (cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo)))
       {
@@ -2655,12 +2654,9 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       }
       else
       {
-          /* 
-           * clear them will affect the pacing rate
          m_ullTargetTime = 0;
          m_ullTimeDiff = 0;
          ts = 0;
-         */
          return 0;
       }
 
@@ -2674,7 +2670,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d SndHighSeq: %d send_ts: %ldms\n",
+   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d send_ts: %.2fms cumu_diff: %ldms\n",
            send_pkt.c_str(),
            packet.m_iSeqNo,
            packet.getMsgNo(),
@@ -2682,9 +2678,8 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
            packet.getLength() + CPacket::m_iPktHdrSize,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
-           m_iSndHighSeqNo,
-           (enter_ts +  (ts - entertime) / m_ullCPUFrequency) / 1000
-           //duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count()
+           (enter_ts +  (ts - entertime) / m_ullCPUFrequency) / 1000.0,
+           m_ullTimeDiff
            );
 
    m_ullTargetTime = ts;

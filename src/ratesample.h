@@ -31,9 +31,9 @@ private:
 
 public:
     RateSample();
-    void onAck(Block* block, bool real_ack);
-    void onPktSent(Block* block, uint64_t send_ts);
-    void onTimeout();
+    void    onAck(Block* block, bool real_ack);
+    void    onPktSent(Block* block, uint64_t send_ts);
+    void    onTimeout();
 
     float   deliveryRate() const { return delivery_rate_; }
 
@@ -41,17 +41,20 @@ public:
 
     bool    isAppLimited() const { return is_app_limited_; }
 
-    int pktsInFlight() const { return pkts_in_flight_; }
+    int     pktsInFlight() const { return pkts_in_flight_; }
 
     bool    packetLost() const { return packet_lost_; }
 
-    void setPacketLost(bool lost) {
+    void    setPacketLost(bool lost) {
         packet_lost_ = lost;
     }
 
-    void setAppLimited(bool limited) {
+    void    setAppLimited(bool limited) {
         is_app_limited_ = limited;
     }
+
+    uint64_t delivered_mstamp_;
+    int     acked_sacked_;
 };
 
 #endif

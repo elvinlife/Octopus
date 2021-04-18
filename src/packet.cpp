@@ -212,6 +212,7 @@ void CPacket::pack(int pkttype, void* lparam, void* rparam, int size)
       if (NULL != lparam) {
          m_nHeader[1] = *(int32_t *)lparam;
          m_nHeader[2] = *((int32_t *)lparam + 1);
+         m_nHeader[3] = *((int32_t *)lparam + 2);
       }
 
       // data ACK seq. no. 
@@ -239,6 +240,7 @@ void CPacket::pack(int pkttype, void* lparam, void* rparam, int size)
       if (NULL != lparam) {
           m_nHeader[1] = *(int32_t *)lparam;
           m_nHeader[2] = *((int32_t *)lparam + 1);
+          m_nHeader[3] = *((int32_t *)lparam + 2);
       }
       m_PacketVector[1].iov_base = (char *)rparam;
       m_PacketVector[1].iov_len = size;
@@ -353,6 +355,11 @@ int32_t CPacket::getRcvAck() const
 int32_t CPacket::getRcvWnd() const
 {
     return m_nHeader[2];
+}
+
+int32_t CPacket::getTriggerSeq() const
+{
+    return m_nHeader[3];
 }
 
 int CPacket::getMsgBoundary() const

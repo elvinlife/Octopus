@@ -28,11 +28,11 @@ void RateSample::onAck(Block* block, bool real_ack)
         pkts_in_flight_ = highest_seq_sent_ - highest_ack_ + 1;
     }
     setPacketLost( false );
-    updateRateSample(block, real_ack);
-    if (prior_delivered_ts_ == 0)
+    if ( !updateRateSample(block, real_ack) ||
+            prior_delivered_ts_ == 0 )
         return;
-    interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;
-    //interval_ = ack_elapsed_;
+    //interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;
+    interval_ = ack_elapsed_;
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ / 0.128;
@@ -70,10 +70,10 @@ void RateSample::onTimeout()
     packet_lost_ = false;
 }
 
-void RateSample::updateRateSample(Block *block, bool real_ack)
+bool RateSample::updateRateSample(Block *block, bool real_ack)
 {
     if (block->delivered_ts_ == 0)
-        return;
+        return false;
     // only update the ack_elapsed if the cumu_delivered of the acked block increases to avoid overestimation
     bool is_valid = block->delivered_ > prior_delivered_;
 
@@ -86,7 +86,9 @@ void RateSample::updateRateSample(Block *block, bool real_ack)
         send_elapsed_ = block->sent_ts_ - block->first_sent_ts_;
         ack_elapsed_ = cumu_delivered_ts_ - block->delivered_ts_;
         first_sent_ts_ = block->sent_ts_;
+        return true;
     //}
+    //return false;
 }
 
 /*

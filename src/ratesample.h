@@ -27,7 +27,7 @@ private:
     int     highest_ack_;
 
     static  const int PacketMTU = 1500;
-    void updateRateSample(Block* block, bool real_ack);
+    bool    updateRateSample(Block* block, bool real_ack);
 
 public:
     RateSample();

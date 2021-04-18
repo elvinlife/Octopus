@@ -1813,9 +1813,10 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
                s_UDTUnited.m_EPoll.update_events(m_SocketID, m_sPollID, UDT_EPOLL_IN, true);
            }
 
-           int32_t data[2];
-           data[0] = m_iRcvLastAck;
+           int32_t data[3];
+           data[0] = ack;
            data[1] = m_pRcvBuffer->getAvailBufSize();
+           data[2] = *(int32_t *)lparam; 
            // a minimum flow window of 2 is used, even if buffer is full, to break potential deadlock
            if (data[1] < 2)
                data[1] = 2;
@@ -1952,8 +1953,9 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
            s_UDTUnited.m_EPoll.update_events(m_SocketID, m_sPollID, UDT_EPOLL_IN, true);
        }
        int32_t data[3];
-       data[0] = CSeqNo::incseq(m_iRcvCurrSeqNo);
+       data[0] = ack;
        data[1] = m_pRcvBuffer->getAvailBufSize();
+       data[2] = *(int32_t *)lparam;  // it carrys the received seq that triggers this sack
        // a minimum flow window of 2 is used, even if buffer is full, to break potential deadlock
        if (data[1] < 2)
            data[1] = 2;
@@ -2282,7 +2284,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        case 3: //011 - SACK
    {
        int32_t* sack_array = (int32_t *)(ctrlpkt.m_pcData);
-       // modify the sack area and ack
+       // modify the sack area and ack based on the SndForward
        // sack area [left, right)
        if (ctrlpkt.getRcvAck() < m_iSndForward) {
            int32_t sack_num = sack_array[0];
@@ -2326,6 +2328,14 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        checkPktForward();
        CGuard::leaveCS(m_AckLock);
 
+       // call onAck for both acked and sacked pkt
+       int32_t seq_sent = ctrlpkt.getTriggerSeq();
+       if ( seq_sent >= m_iSndLastDataAck ) {
+           Block* block = m_pSndBuffer->readData( 0, ctrlpkt.getTriggerSeq() );
+           m_pRateSample->onAck( block, true );
+           m_pCC->onAck( block, m_pRateSample );
+       }
+
        int32_t ack = ctrlpkt.getRcvAck();
        if ( CSeqNo::seqcmp( ack, m_iSndLastDataAck ) >= 0 ) {
            m_iFlowWindowSize = ctrlpkt.getRcvWnd();
@@ -2338,10 +2348,6 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        if (offset > 0)
        {
            // only call onAck for m_pCC and m_pRateSample when new ack arrives
-           Block* block = m_pSndBuffer->readData( 0, m_iSndLastDataAck - 1 );
-           m_pRateSample->onAck( block, true );
-           m_pCC->onAck( block, m_pRateSample );
-
            if (CSeqNo::seqcmp(m_iSndLastDataAck, m_iSndCurrSeqNo) > 0)
                m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
            m_pSndBuffer->ackData(m_iSndLastDataAck);
@@ -2840,9 +2846,12 @@ int CUDT::processData(CUnit* unit)
    }
 
    if (sack_num > 0) {
-       sendCtrl(3, NULL, sack_array, 4 * (2 * sack_num + 1) );
-       fprintf(stderr, "send_sack, ack: %d RcvHighSeq: %d", 
-               m_iRcvCurrSeqNo + 1, m_iRcvHighSeqNo);
+       // it carries the received seq that trigger this sack
+       sendCtrl(3, &packet.m_iSeqNo, sack_array, 4 * (2 * sack_num + 1) );
+       fprintf(stderr, "send_sack, ack: %d RcvHighSeq: %d RecvSeq: %d", 
+               m_iRcvCurrSeqNo + 1,
+               m_iRcvHighSeqNo,
+               packet.m_iSeqNo);
        for(int i = 0; i < sack_num; i++) {
            fprintf(stderr, "[%d, %d]\t", 
                    sack_array[ SACK_LEFT(i) ],
@@ -2851,9 +2860,12 @@ int CUDT::processData(CUnit* unit)
        fprintf(stderr, "ts: %ldms\n", CTimer::getTime() / 1000);
    }
    else {
-       sendCtrl(2);
-       fprintf(stderr, "send_ack, ack: %d RcvHighSeq: %d ts: %ldms\n", 
-               m_iRcvCurrSeqNo+1, m_iRcvHighSeqNo, CTimer::getTime() / 1000);
+       sendCtrl(2, &packet.m_iSeqNo);
+       fprintf(stderr, "send_ack, ack: %d RcvHighSeq: %d RecvSeq: %d ts: %ldms\n", 
+               m_iRcvCurrSeqNo+1,
+               m_iRcvHighSeqNo,
+               packet.m_iSeqNo,
+               CTimer::getTime() / 1000);
    }
 
    return 0;

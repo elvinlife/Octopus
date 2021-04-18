@@ -154,6 +154,8 @@ public:
 
    int32_t getRcvWnd() const;
 
+   int32_t getTriggerSeq() const;
+
       // Functionality:
       //    Read the message boundary flag bit.
       // Parameters:

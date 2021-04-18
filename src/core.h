@@ -345,7 +345,7 @@ private: // Sending related data
    volatile double m_dCongestionWindow;         // congestion window size
    volatile double m_dPacingRate;
    volatile double m_dBtlBw;
-   volatile int    m_iBBRMode;
+   bool m_bLostRecovery;
 
    volatile int32_t m_iSndLastAck;              // Last ACK received
    volatile int32_t m_iSndLastDataAck;          // The cumulative ACK
@@ -354,7 +354,6 @@ private: // Sending related data
    volatile int32_t m_iSndCurrSeqNo;            // The last seq that has been sent              
    volatile int32_t m_iSndCurrMsgNo;            // The last msg that has been sent
    int32_t m_iLastDecSeq;                       // Sequence number sent last decrease occurs
-   //int32_t m_iSndLastAck2;                      // Last ACK2 sent back
    uint64_t m_ullSndLastAck2Time;               // The time when last ACK2 was sent back
 
    int32_t m_iISN;                              // Initial Sequence Number

@@ -27,11 +27,12 @@ private:
     int     highest_ack_;
 
     static  const int PacketMTU = 1500;
-    bool    updateRateSample(Block* block, bool real_ack);
+    bool    updateRateSample(Block* block);
 
 public:
     RateSample();
-    void    onAck(Block* block, bool real_ack);
+    // type: 1(ack); 2(sack); 3(fake_ack)
+    void    onAckSacked(Block* block, int type);
     void    onPktSent(Block* block, uint64_t send_ts);
     void    onTimeout();
 

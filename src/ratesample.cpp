@@ -10,7 +10,7 @@ RateSample::RateSample()
     delivery_rate_(0),
     cumu_delivered_(0),
     cumu_delivered_ts_(CTimer::getTime()),
-    first_sent_ts_(0),
+    first_sent_ts_(CTimer::getTime()),
     is_app_limited_(false),
     packet_lost_(false),
     pkts_in_flight_(0),
@@ -18,19 +18,31 @@ RateSample::RateSample()
     highest_ack_(0)
 {}
 
-void RateSample::onAck(Block* block, bool real_ack)
+void RateSample::onAckSacked(Block* block, int type)
 {
-    // should update all pkts in sack_area
+    // this pkt has been sacked or acked
+    if ( block->delivered_ts_ == 0)
+        return;
     delivered_mstamp_ = CTimer::getTime();
-    acked_sacked_ = real_ack ? 1 : 0;
-    if ( block->seq_ + 1 > highest_ack_ ) {
+    setPacketLost( false );
+    if ( type == 1 ) {
         highest_ack_ = block->seq_ + 1;
         pkts_in_flight_ = highest_seq_sent_ - highest_ack_ + 1;
+        acked_sacked_ = 1;
     }
-    setPacketLost( false );
-    if ( !updateRateSample(block, real_ack) ||
-            prior_delivered_ts_ == 0 )
+    else if ( type == 2 ) {
+        pkts_in_flight_ -= 1;
+        acked_sacked_ = 1;
+        setPacketLost( true ); // is it appropriate?
+    }
+    else {
+        acked_sacked_ = 0;
+        setPacketLost( true ); // is it appropriate?
+    }
+    updateRateSample( block );
+    if ( prior_delivered_ts_ == 0 )
         return;
+
     //interval_ = send_elapsed_ > ack_elapsed_ ? send_elapsed_ : ack_elapsed_;
     interval_ = ack_elapsed_;
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
@@ -55,7 +67,7 @@ void RateSample::onPktSent(Block* block, uint64_t send_ts)
 {
     if ( block->seq_ > highest_seq_sent_ ) {
         highest_seq_sent_ = block->seq_;
-        pkts_in_flight_ = highest_seq_sent_ - highest_ack_ + 1;
+        pkts_in_flight_ += 1;
     }
     block->delivered_ = cumu_delivered_;
     block->delivered_ts_ = cumu_delivered_ts_;
@@ -70,10 +82,8 @@ void RateSample::onTimeout()
     packet_lost_ = false;
 }
 
-bool RateSample::updateRateSample(Block *block, bool real_ack)
+bool RateSample::updateRateSample(Block *block)
 {
-    if (block->delivered_ts_ == 0)
-        return false;
     // only update the ack_elapsed if the cumu_delivered of the acked block increases to avoid overestimation
     bool is_valid = block->delivered_ > prior_delivered_;
 

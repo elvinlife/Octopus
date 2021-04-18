@@ -629,6 +629,7 @@ void CUDT::connect(const sockaddr* serv_addr)
    m_iSndCurrMsgNo = -1;
    m_iSndHighSeqNo = m_iISN - 1;
    m_ullSndLastAck2Time = CTimer::getTime();
+   m_bLostRecovery = false;
 
    // Inform the server my configurations.
    CPacket request;
@@ -875,6 +876,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    m_iSndCurrMsgNo = -1;
    m_iSndHighSeqNo = m_iISN - 1;
    m_ullSndLastAck2Time = CTimer::getTime();
+   m_bLostRecovery = false;
 
    // this is a reponse handshake
    hs->m_iReqType = -1;
@@ -1700,7 +1702,6 @@ void CUDT::CCUpdate()
    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
    m_dPacingRate = 1500 * 8.0 / m_pCC->m_dPktSndPeriod; 
    m_dBtlBw = m_pCC->m_dBtlBw;
-   m_iBBRMode = m_pCC->m_iBBRMode;
    m_dCongestionWindow = m_pCC->m_dCWndSize;
    /*
    if (m_llMaxBW <= 0)
@@ -2119,11 +2120,13 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
                break;
            }
 
+           m_bLostRecovery = false;
+
            if (CSeqNo::seqcmp(m_iSndLastDataAck, m_iSndCurrSeqNo) > 0)
                m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
 
            Block* block = m_pSndBuffer->readData( 0, m_iSndLastDataAck - 1 );
-           m_pRateSample->onAck( block, true );
+           m_pRateSample->onAckSacked( block, 1 );
            m_pRateSample->setPacketLost( false );
            m_pCC->onAck( block, m_pRateSample );
 
@@ -2317,6 +2320,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
                sack_array[0] = new_sack_num;
            }
        }
+       m_bLostRecovery = true;
        m_iSndLastAck = m_iSndLastDataAck;
 
        // protect packet retransmission
@@ -2329,10 +2333,9 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        CGuard::leaveCS(m_AckLock);
 
        // call onAck for both acked and sacked pkt
-       int32_t seq_sent = ctrlpkt.getTriggerSeq();
-       if ( seq_sent >= m_iSndLastDataAck ) {
+       if ( ctrlpkt.getTriggerSeq() >= m_iSndLastDataAck ) {
            Block* block = m_pSndBuffer->readData( 0, ctrlpkt.getTriggerSeq() );
-           m_pRateSample->onAck( block, true );
+           m_pRateSample->onAckSacked( block, 2 );
            m_pCC->onAck( block, m_pRateSample );
        }
 
@@ -2343,7 +2346,6 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
        }
 
        int offset = CSeqNo::seqoff( m_iSndLastAck, m_iSndLastDataAck );
-       m_pRateSample->setPacketLost( true );
 
        if (offset > 0)
        {
@@ -2522,7 +2524,7 @@ void CUDT::checkPktForward()
         if ( !block->is_reliable() ) {
             m_pScoreBoard->markRetran( seq );
             m_pScoreBoard->update( seq, NULL );
-            m_pRateSample->onAck( block, false );
+            m_pRateSample->onAckSacked( block, 3 );
             m_iSndForward = seq + 1;
         }
         else
@@ -2604,7 +2606,8 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       // check congestion/flow window limet
       int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
 
-      if (cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo)))
+      if (cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo))
+              || ( m_bLostRecovery && m_pRateSample->pktsInFlight() <= cwnd ) )
       {
          Block* block = NULL;
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {

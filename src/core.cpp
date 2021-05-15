@@ -1666,7 +1666,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
    perf->msRTT = m_iRTT/1000.0;
    perf->mbpsBandwidth = m_iBandwidth * m_iPayloadSize * 8.0 / 1000000.0;
 
-   perf->pacingRate = (int)m_dPacingRate * 1024;
+   perf->pacingRate = (int)m_dVideoRate * 1024;
 
    #ifndef WIN32
       if (0 == pthread_mutex_trylock(&m_ConnectionLock))
@@ -1700,9 +1700,12 @@ void CUDT::sample(CPerfMon* perf, bool clear)
 void CUDT::CCUpdate()
 {
    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
-   m_dPacingRate = 1500 * 8.0 / m_pCC->m_dPktSndPeriod; 
-   m_dBtlBw = m_pCC->m_dBtlBw;
    m_dCongestionWindow = m_pCC->m_dCWndSize;
+
+   //m_dPacingRate = 1500 / m_pCC->m_dPktSndPeriod / 0.131;
+   m_dBtlBw = m_pCC->m_dBtlBw;
+   m_dVideoRate = m_pCC->m_dVideoRate;
+
    /*
    if (m_llMaxBW <= 0)
       return;
@@ -2541,7 +2544,7 @@ void CUDT::checkAppLimited()
 {
     int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
     if ( m_pSndBuffer->isEmpty() &&
-            cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo)) ) {
+            cwnd >= m_pRateSample->pktsInFlight() ) {
         m_pRateSample->setAppLimited( true );
     }
     else
@@ -3001,7 +3004,7 @@ void CUDT::checkTimers()
    uint64_t next_exp_time;
    // temporarily set timeout to 400ms(3RTT)
    //next_exp_time = m_ullLastRspTime + m_pCC->m_iRTO * m_ullCPUFrequency;
-   next_exp_time = m_ullLastRspTime + 1000000 * m_ullCPUFrequency;
+   next_exp_time = m_ullLastRspTime + 10000000 * m_ullCPUFrequency;
 
    if (currtime > next_exp_time)
    {

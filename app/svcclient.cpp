@@ -242,6 +242,8 @@ int main(int argc, char* argv[])
             }
             if ( key_trace == 0 )
                 key_trace = smallest_key;
+            fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d\n",
+                    key_trace, bbr_rate );
         }
 
         uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
@@ -272,14 +274,15 @@ int main(int argc, char* argv[])
             }
 
             ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-            fprintf( stdout, "send_msg msg_no: %u size: %d layer_id: %d ssim: %.2f ts_send: %lu key_trace: %d frame_no: %d\n",
+            fprintf( stdout, "send_msg msg_no: %u size: %d layer_id: %d ssim: %.2f ts_send: %lu key_trace: %d frame_no: %d real_time: %fms\n",
                     msg_no,
                     msg.size_,
                     msg_no % num_layers,
                     msg.ssim_,
                     ts,
                     key_trace,
-                    msg_no / num_layers);
+                    msg_no / num_layers,
+                    CTimer::getTime() / 1000.0 );
         }
 
         frame_no ++;

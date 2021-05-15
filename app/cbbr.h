@@ -378,12 +378,20 @@ class CBBR: public CCC
             setSendQuantum();
             // set cwnd
             setCwnd();
-            m_dBtlBw = btl_bw_;
             m_dPktSndPeriod = PacketMTU / pacing_rate_ / Ratio;
-            fprintf(stderr, "bbr_status rate: %.2f cwnd: %.2f ack_aggr_cwnd: %d btl_bw: %.2f rt_prop: %ld pacing_gain_: %.2f round: %d round_start: %d full_bw_cnt: %d ts: %ld ms\n",
+            m_dBtlBw = btl_bw_;
+            //m_dVideoRate = btl_bw_;
+            m_dVideoRate = pacing_rate_ > btl_bw_ ? pacing_rate_ : btl_bw_;
+            //m_dVideoRate = pacing_rate_ > 1.25 * btl_bw_ ? pacing_rate_ : 1.25 * btl_bw_;
+
+            fprintf( stderr, "bbr_status rate: %.2f cwnd: %.2f"
+                    "videorate: %.2f btl_bw: %.2f"
+                    "rt_prop: %ld pacing_gain_: %.2f"
+                    "round: %d round_start: %d"
+                    "full_bw_cnt: %d ts: %ld ms\n",
                     pacing_rate_,
                     m_dCWndSize,
-                    ackAggregationCwnd(),
+                    m_dVideoRate,
                     btl_bw_,
                     rt_prop_,
                     pacing_gain_,
@@ -405,11 +413,11 @@ class CBBR: public CCC
         void setSendQuantum()
         {
             if ( pacing_rate_ < 12 )
-                send_quantum_ = 1;
-            else if ( pacing_rate_ < 24 )
                 send_quantum_ = 2;
+            else if ( pacing_rate_ < 24 )
+                send_quantum_ = 4;
             else
-                send_quantum_ = (pacing_rate_ / 12.0) > 43 ? 43 : (pacing_rate_ / 12.0);
+                send_quantum_ = (pacing_rate_ / 6.0) > 43 ? 43 : (pacing_rate_ / 6.0);
         }
 
         void setCwnd()
@@ -451,7 +459,6 @@ class CBBR: public CCC
         inline void enterStartup()
         {
             fprintf(stderr, "enterStartup\n");
-            m_iBBRMode = 1;
             state_ = Startup;
             pacing_gain_ = BBRHighGain;
             cwnd_gain_ = BBRHighGain;
@@ -460,7 +467,6 @@ class CBBR: public CCC
         inline void enterDrain()
         {
             fprintf(stderr, "enterDrain\n");
-            m_iBBRMode = 2;
             state_ = Drain;
             pacing_gain_ = 1 / BBRHighGain;
             cwnd_gain_ = BBRHighGain;
@@ -469,7 +475,6 @@ class CBBR: public CCC
         inline void enterProbeBW()
         {
             fprintf(stderr, "enterProbeBW\n");
-            m_iBBRMode = 3;
             state_ = ProbeBW;
             cycle_index_ = 0;
             cycle_stamp_ = CTimer::getTime();
@@ -480,7 +485,6 @@ class CBBR: public CCC
         inline void enterProbeRTT()
         {
             fprintf(stderr, "enterProbeRTT\n");
-            m_iBBRMode = 4;
             state_ = ProbeRTT;
             pacing_gain_ = 1;
             cwnd_gain_ = 1;
@@ -491,6 +495,7 @@ class CBBR: public CCC
         static const int BtlBWFilterLen     = 10;
         static const int BtlBWFilterMinWnd  = 600000;
 
+        //static const uint64_t RTpropFilterLen   = 1000000000;
         static const uint64_t RTpropFilterLen   = 10000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
         static const int BBRMinPipeCwnd         = 4;

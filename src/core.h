@@ -344,6 +344,7 @@ private: // Sending related data
    volatile int m_iFlowWindowSize;              // Flow control window size
    volatile double m_dCongestionWindow;         // congestion window size
    volatile double m_dPacingRate;
+   volatile double m_dVideoRate;
    volatile double m_dBtlBw;
    bool m_bLostRecovery;
 

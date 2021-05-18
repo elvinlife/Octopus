@@ -2,12 +2,12 @@
 #include "common.h"
 
 RateSample::RateSample()
-    :prior_delivered_(0),
-    prior_delivered_ts_(0),
-    interval_(0),
+    : interval_(0),
     ack_elapsed_(0),
     send_elapsed_(0),
     delivery_rate_(0),
+    prior_delivered_(0),
+    prior_delivered_ts_(0),
     cumu_delivered_(0),
     cumu_delivered_ts_(CTimer::getTime()),
     first_sent_ts_(CTimer::getTime()),
@@ -21,7 +21,9 @@ RateSample::RateSample()
 void RateSample::onAckSacked(Block* block, int type)
 {
     // this pkt has been sacked or acked
-    if ( block->delivered_ts_ == 0)
+    if ( block->delivered_ts_ == 0 ||
+            block->seq_ < highest_ack_
+            )
         return;
     delivered_mstamp_ = CTimer::getTime();
     setPacketLost( false );
@@ -40,6 +42,9 @@ void RateSample::onAckSacked(Block* block, int type)
         setPacketLost( true ); // is it appropriate?
     }
     updateRateSample( block );
+
+    // when pkt i is acked, there should be a pkt acked when i is sent
+    // to calculate ack rate
     if ( prior_delivered_ts_ == 0 )
         return;
 
@@ -48,8 +53,8 @@ void RateSample::onAckSacked(Block* block, int type)
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ / 0.128;
-        fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms \
-                sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d\n", 
+        fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms "
+                "sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d\n", 
                 delivery_rate_, 
                 sample_delivered,
                 ack_elapsed_ / 1000,
@@ -76,10 +81,18 @@ void RateSample::onPktSent(Block* block, uint64_t send_ts)
     block->first_sent_ts_ = first_sent_ts_;
 }
 
-void RateSample::onTimeout()
+void RateSample::onTimeout( int ack )
 {
     is_app_limited_ = false;
     packet_lost_ = false;
+    // try not to consider retransmitted packets for bandwidth estimation
+    highest_ack_ = ack;
+
+    prior_delivered_ = 0;
+    prior_delivered_ts_ = 0;
+    cumu_delivered_ = 0;
+    cumu_delivered_ts_ = CTimer::getTime();
+    first_sent_ts_ = CTimer::getTime();
 }
 
 bool RateSample::updateRateSample(Block *block)

@@ -50,26 +50,27 @@ written by
 struct Block
 {
     static const uint32_t PRIORITY_OFFSET = 29; 
-    char* m_pcData;                   // pointer to the data block
-    int m_iLength;                    // length of the block
+    char*       m_pcData;                   // pointer to the data block
+    int         m_iLength;                    // length of the block
 
     // msg related information
-    int32_t m_iMsgNo;                 // message number
-    uint32_t m_iExtra;
-    uint64_t m_OriginTime;            // original request time
-    int m_iTTL;                       // time to live (milliseconds)
-    bool    m_Drop;
+    int32_t     m_iMsgNo;                 // message number
+    uint32_t    m_iExtra;
+    uint64_t    m_OriginTime;            // original request time
+    int         m_iTTL;                       // time to live (milliseconds)
+    bool        m_Drop;
 
     // for ratesample
-    int     seq_;
-    uint64_t delivered_;
-    uint64_t delivered_ts_;
-    uint64_t first_sent_ts_;
-    uint64_t sent_ts_;
+    int         seq_;
+    uint64_t    delivered_;
+    uint64_t    delivered_ts_;
+    uint64_t    first_sent_ts_;
+    uint64_t    sent_ts_;
 
     Block* m_pNext;                   // next block
 
-    bool is_reliable() const { return !(m_iExtra >> PRIORITY_OFFSET); }
+    bool        is_reliable() const { return !(m_iExtra >> PRIORITY_OFFSET); }
+    bool        is_retrans_;
 };
 
 class CSndBuffer
@@ -170,19 +171,6 @@ private:
 private:
    pthread_mutex_t m_BufLock;           // used to synchronize buffer operation
 
-   /*
-   struct Block
-   {
-      char* m_pcData;                   // pointer to the data block
-      int m_iLength;                    // length of the block
-
-      int32_t m_iMsgNo;                 // message number
-      uint64_t m_OriginTime;            // original request time
-      int m_iTTL;                       // time to live (milliseconds)
-
-      Block* m_pNext;                   // next block
-   } *m_pBlock, *m_pFirstBlock, *m_pCurrBlock, *m_pLastBlock;
-   */
    Block *m_pBlock, *m_pFirstBlock, *m_pCurrBlock, *m_pLastBlock;
 
    // m_pBlock:         The head pointer

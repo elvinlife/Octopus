@@ -182,6 +182,7 @@ void CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, u
 
       s->m_OriginTime   = time;
       s->m_Drop         = is_drop;
+      s->is_retrans_    = false;
       //s->m_iTTL = ttl;
 
       s = s->m_pNext;

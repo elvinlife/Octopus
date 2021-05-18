@@ -317,7 +317,9 @@ class CBBR: public CCC
 
         void updateRTprop(Block* block)
         {
-            // have to skip the first packet because of udt limitation
+            // don't count retransmitted packet to calculate rtt
+            if ( block->is_retrans_ )
+                return;
             uint64_t rtt = CTimer::getTime() - block->sent_ts_;
             rtprop_expired_ = CTimer::getTime() > 
                 (rtprop_stamp_ + RTpropFilterLen);
@@ -384,10 +386,10 @@ class CBBR: public CCC
             m_dVideoRate = pacing_rate_ > btl_bw_ ? pacing_rate_ : btl_bw_;
             //m_dVideoRate = pacing_rate_ > 1.25 * btl_bw_ ? pacing_rate_ : 1.25 * btl_bw_;
 
-            fprintf( stderr, "bbr_status rate: %.2f cwnd: %.2f"
-                    "videorate: %.2f btl_bw: %.2f"
-                    "rt_prop: %ld pacing_gain_: %.2f"
-                    "round: %d round_start: %d"
+            fprintf( stderr, "bbr_status rate: %.2f cwnd: %.2f "
+                    "videorate: %.2f btl_bw: %.2f "
+                    "rt_prop: %ld pacing_gain_: %.2f "
+                    "round: %d round_start: %d "
                     "full_bw_cnt: %d ts: %ld ms\n",
                     pacing_rate_,
                     m_dCWndSize,

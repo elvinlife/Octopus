@@ -2639,6 +2639,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
                     CSeqNo::seqoff( m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo) ),
                     CSeqNo::incseq(m_iSndCurrSeqNo)
                     );
+            block->is_retrans_ = true;
          }
          if (block)
          {
@@ -3004,13 +3005,14 @@ void CUDT::checkTimers()
    uint64_t next_exp_time;
    // temporarily set timeout to 400ms(3RTT)
    //next_exp_time = m_ullLastRspTime + m_pCC->m_iRTO * m_ullCPUFrequency;
-   next_exp_time = m_ullLastRspTime + 10000000 * m_ullCPUFrequency;
+   next_exp_time = m_ullLastRspTime + 5000000 * m_ullCPUFrequency;
 
    if (currtime > next_exp_time)
    {
       // Haven't receive any information from the peer, is it dead?!
       // timeout: at least 16 expirations and must be greater than 10 seconds
-      if ( m_iEXPCount > 16 )
+      //if ( m_iEXPCount > 16 )
+      if ( m_iEXPCount > 5 )
       {
          //
          // Connection is broken. 
@@ -3037,15 +3039,23 @@ void CUDT::checkTimers()
       // sender: Insert all the packets sent after last received acknowledgement into the sender loss list.
       if (m_pSndBuffer->getCurrBufSize() > 0)
       {
+         for ( int32_t seq = m_iSndLastDataAck ; seq <= m_iSndCurrSeqNo; ++seq ) {
+            int offset = CSeqNo::seqoff( m_iSndLastDataAck, seq ); 
+            Block* block = m_pSndBuffer->readData( offset, seq ); 
+            if ( block->is_reliable() )
+                m_iSndCurrSeqNo = seq;
+         }
+         m_iSndLastDataAck = m_iSndCurrSeqNo + 1;
+         m_iSndForward = m_iSndLastDataAck + 1;
+
          m_pCC->onTimeout();
-         m_pRateSample->onTimeout();
+         m_pRateSample->onTimeout( m_iSndLastDataAck );
          CCUpdate();
 
          fprintf(stderr, "Timeout! RTO:%ldus Timeout:%ldus\n",
                  (next_exp_time - m_ullLastRspTime) / m_ullCPUFrequency,
                  (currtime - m_ullLastRspTime) / m_ullCPUFrequency);
          m_pScoreBoard->clear();
-         m_iSndCurrSeqNo = m_iSndLastDataAck - 1;
 
          // immediately restart transmission
          m_pSndQueue->m_pSndUList->update(this, false);

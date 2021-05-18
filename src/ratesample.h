@@ -7,14 +7,13 @@ class RateSample
 {
 private:
     // rate sample related info 
-    uint64_t prior_delivered_;
-    uint64_t prior_delivered_ts_;
     uint64_t interval_;
     uint64_t ack_elapsed_;
     uint64_t send_elapsed_;
     float   delivery_rate_;
 
-    // connection related info 
+    uint64_t prior_delivered_;
+    uint64_t prior_delivered_ts_;
     uint64_t cumu_delivered_;
     uint64_t cumu_delivered_ts_;
     uint64_t first_sent_ts_;
@@ -34,7 +33,7 @@ public:
     // type: 1(ack); 2(sack); 3(fake_ack)
     void    onAckSacked(Block* block, int type);
     void    onPktSent(Block* block, uint64_t send_ts);
-    void    onTimeout();
+    void    onTimeout( int ack );
 
     float   deliveryRate() const { return delivery_rate_; }
 

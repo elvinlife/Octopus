@@ -274,7 +274,7 @@ int main(int argc, char* argv[])
             }
 
             ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-            fprintf( stdout, "send_msg msg_no: %u size: %d layer_id: %d ssim: %.2f ts_send: %lu key_trace: %d frame_no: %d real_time: %fms\n",
+            fprintf( stdout, "send_msg msg_no: %u size: %d layer_id: %d ssim: %.2f ts_send: %lu key_trace: %d frame_no: %d real_time: %.2fms\n",
                     msg_no,
                     msg.size_,
                     msg_no % num_layers,

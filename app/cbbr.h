@@ -104,7 +104,7 @@ class CBBR: public CCC
 
         CBBR() 
             :btl_bw_ ( getThroughput(BBRMinPipeCwnd, BBRInitRTT) ),
-            rt_prop_( 200000 ),
+            rt_prop_( BBRInitRTT ),
             pacing_gain_( 1 ),
             cwnd_gain_( 1 ),
             btl_bw_filter_( BtlBWFilterLen, btl_bw_ ), 
@@ -498,14 +498,14 @@ class CBBR: public CCC
         static const int BtlBWFilterMinWnd  = 600000;
 
         //static const uint64_t RTpropFilterLen   = 1000000000;
-        static const uint64_t RTpropFilterLen   = 10000000;
+        static const uint64_t RTpropFilterLen   = 100000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
         static const int BBRMinPipeCwnd         = 4;
-        static const int BBRInitRTT             = 100000;
+        static const int BBRInitRTT             = 300000;
         static const int PacketMTU              = 1500;
         static const int AckEpochResetThresh    = 1 << 20;
         static const int ExtraAckedMaxRtts      = 5;
-        static constexpr double Ratio               = 0.131072;// 1Mbps = 0.131072B/us
+        static constexpr double Ratio           = 0.125;
 
         // important states
         double PacingGainCycle[8]   = {1.25, 0.75, 1, 1, 1, 1, 1, 1};

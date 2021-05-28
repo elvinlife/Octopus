@@ -1666,7 +1666,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
    perf->msRTT = m_iRTT/1000.0;
    perf->mbpsBandwidth = m_iBandwidth * m_iPayloadSize * 8.0 / 1000000.0;
 
-   perf->pacingRate = (int)m_dVideoRate * 1024;
+   perf->pacingRate = (int)(m_dVideoRate * 1024);
 
    #ifndef WIN32
       if (0 == pthread_mutex_trylock(&m_ConnectionLock))

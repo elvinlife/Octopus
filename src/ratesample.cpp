@@ -52,7 +52,7 @@ void RateSample::onAckSacked(Block* block, int type)
     interval_ = ack_elapsed_;
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
-        delivery_rate_ = (float)sample_delivered / interval_ / 0.128;
+        delivery_rate_ = (float)sample_delivered / interval_ * 8;
         fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms "
                 "sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d\n", 
                 delivery_rate_, 
@@ -101,6 +101,7 @@ bool RateSample::updateRateSample(Block *block)
     bool is_valid = block->delivered_ > prior_delivered_;
 
     cumu_delivered_ += acked_sacked_ * PacketMTU;
+    //cumu_delivered_ += acked_sacked_ * (block->m_iLength + 52); // application header(24) + udp(8) + ip(20)
     cumu_delivered_ts_ = delivered_mstamp_;
 
     //if ( is_valid ) {

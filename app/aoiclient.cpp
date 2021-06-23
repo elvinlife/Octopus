@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
 
     uint32_t    frame_no = 0;
     int         frame_gap = 33;
-    uint32_t    PREEMPT_MUSK = 0x10000000;
+    uint32_t    PREEMPT_MUSK = 0x2000000;
 
     while (true) {
         int64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
@@ -99,10 +99,10 @@ int main(int argc, char* argv[])
         msg = trace_array[ frame_no % trace_array.size() ];
         uint32_t wildcard = 0;
         if (frame_no % gop_size == 0) {
-            wildcard = 1 << 29 | PREEMPT_MUSK;
+            wildcard = 1 << 29 | 1 << 26 | PREEMPT_MUSK;
         }
         else {
-            wildcard = 2 << 29 | PREEMPT_MUSK;
+            wildcard = 2 << 29 | 2 << 26 | PREEMPT_MUSK;
         }
 
         std::string msg_payload( msg.size_, 'a' );

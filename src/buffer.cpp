@@ -153,8 +153,8 @@ void CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, u
       increase();
 
    CGuard::enterCS(m_BufLock);
-   if ( extra_field & 0x10000000 ) {
-       setDropFlag( (extra_field & 0xe0000000) >> 29 );
+   if ( extra_field & 0x2000000 ) {
+       setDropFlag( (extra_field & 0x1c000000) >> 26 );
    }
    CGuard::leaveCS(m_BufLock);
 

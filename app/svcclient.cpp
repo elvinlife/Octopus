@@ -99,12 +99,13 @@ int main(int argc, char* argv[])
 
     uint32_t    frame_no = 0;
     uint32_t    gop_no = 0;
-    uint64_t    frame_gap = 33;
+    float       frame_gap = 33.333;
     int         bbr_rate = 0; 
     int         key_trace = 0;
     int         smallest_key = 1 << 20;
     const uint32_t PREEMPT_MUSK = 0x2000000;
     UDT::TRACEINFO perf;
+    uint64_t ts, ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
 
     while (true) {
         if (frame_no % gop_size == 0) {
@@ -128,9 +129,6 @@ int main(int argc, char* argv[])
             fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d\n",
                     key_trace, bbr_rate );
         }
-
-        uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-        uint64_t ts = ts_begin;
 
         for (int i = 0; i < num_layers; ++i) {
             int msg_no = frame_no * num_layers + i;
@@ -169,8 +167,8 @@ int main(int argc, char* argv[])
         }
 
         frame_no ++;
-        if ( ts-ts_begin < frame_gap ) {
-            std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin) ) );
+        if ( ts-ts_begin < (uint64_t)(frame_no * frame_gap) ) {
+            std::this_thread::sleep_for( milliseconds( (uint64_t)(frame_no * frame_gap) - (ts - ts_begin) ) );
         }
     }
 

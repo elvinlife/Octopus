@@ -89,13 +89,11 @@ int main(int argc, char* argv[])
     ifs.close();
 
     uint32_t    frame_no = 0;
-    int         frame_gap = 33;
     uint32_t    PREEMPT_MUSK = 0x2000000;
+    float       frame_gap = 33.333;
+    int64_t ts, ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
 
     while (true) {
-        int64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-        int64_t ts = ts_begin;
-
         msg = trace_array[ frame_no % trace_array.size() ];
         uint32_t wildcard = 0;
         if (frame_no % gop_size == 0) {
@@ -126,8 +124,8 @@ int main(int argc, char* argv[])
                 ts);
 
         frame_no ++;
-        if ( (ts-ts_begin) < frame_gap ) {
-            std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin)) );
+        if ( (ts-ts_begin) < (uint64_t)(frame_no * frame_gap) ) {
+            std::this_thread::sleep_for( milliseconds( (uint64_t)(frame_no * frame_gap) - (ts-ts_begin)) );
         }
     }
 

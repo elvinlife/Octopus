@@ -79,6 +79,9 @@ const int32_t CAckNo::m_iMaxAckSeqNo = 0x7FFFFFFF;
 const int32_t CMsgNo::m_iMsgNoTH = 0xFFFFFFF;
 const int32_t CMsgNo::m_iMaxMsgNo = 0x1FFFFFFF;
 
+const uint32_t MASK_MSGNO = 0x1FFFFFFF;
+const uint32_t MASK_BITTHRESH = 0x00FFFFFF;
+
 const int CUDT::m_iVersion = 4;
 const int CUDT::m_iSYNInterval = 10000;
 const int CUDT::m_iSelfClockInterval = 64;
@@ -627,6 +630,7 @@ void CUDT::connect(const sockaddr* serv_addr)
    m_iSndForward = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
    m_iSndCurrMsgNo = -1;
+   m_iSndDropMsgNo = -1;
    m_iSndHighSeqNo = m_iISN - 1;
    m_ullSndLastAck2Time = CTimer::getTime();
    m_bLostRecovery = false;
@@ -874,6 +878,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    m_iSndForward = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
    m_iSndCurrMsgNo = -1;
+   m_iSndDropMsgNo = -1;
    m_iSndHighSeqNo = m_iISN - 1;
    m_ullSndLastAck2Time = CTimer::getTime();
    m_bLostRecovery = false;
@@ -1334,15 +1339,7 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t e
    checkAppLimited();
 
    // insert the user buffer into the sending list
-   /*
-   int send_rate = m_dPacingRate > m_dBtlBw ? m_dPacingRate : m_dBtlBw;
-   int is_drop = 0;
-   if ( (uint32_t)(send_rate * 1024) < (extra_field & 0x0fffffff ) ) {
-       is_drop = 1;
-   }
-   m_pSndBuffer->addBuffer(data, len, is_drop, inorder, extra_field);
-   */
-   m_pSndBuffer->addBuffer(data, len, 0, inorder, extra_field);
+   m_iSndCurrMsgNo = m_pSndBuffer->addBuffer(data, len, 0, inorder, extra_field);
 
    // insert this socket to the snd list if it is not on the list yet
    m_pSndQueue->m_pSndUList->update(this, false);
@@ -1702,7 +1699,7 @@ void CUDT::CCUpdate()
    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
    m_dCongestionWindow = m_pCC->m_dCWndSize;
 
-   //m_dPacingRate = 1500 / m_pCC->m_dPktSndPeriod / 0.131;
+   m_dPacingRate = 12000 / m_pCC->m_dPktSndPeriod;
    m_dBtlBw = m_pCC->m_dBtlBw;
    m_dVideoRate = m_pCC->m_dVideoRate;
 
@@ -2614,24 +2611,41 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       {
          Block* block = NULL;
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
-             /*
-             int send_rate = m_dPacingRate > m_dBtlBw ? m_dPacingRate : m_dBtlBw;
-             while ( (block = m_pSndBuffer->readCurrData()) != NULL ) {
-                 if ( (block->m_iMsgNo & 0x1fffffff) == m_iSndCurrMsgNo )
-                     break;
-                 else if ( (block->m_iExtra & 0x0fffffff) <= (uint32_t)(send_rate * 1024) ) {
-                     m_iSndCurrMsgNo = block->m_iMsgNo & 0x1fffffff;
-                     break;
-                 }
-             }
-             */
+             double send_rate = m_dPacingRate;
              while ( (block = m_pSndBuffer->readCurrData()) != NULL ) {
                 if ( !block->m_Drop )
                     break;
              }
+             /*
+             double send_rate = 99999999.0;
+             if ( m_dequeueTrace.size() >= 5 )
+                 send_rate = ( m_dequeueTrace.size() - 1 ) * 12000.0 / ( m_dequeueTrace.back() - m_dequeueTrace.front() );
+             while ( ( block = m_pSndBuffer->readCurrData() ) != NULL ) {
+                 if ( block->m_Drop )
+                     continue;
+                 else if ( (block->m_iMsgNo & 0xc0000000) == 0x80000000 &&
+                         (block->m_iExtra & MASK_BITTHRESH) > (uint32_t)(send_rate * 1000) &&
+                         (block->m_iMsgNo & MASK_MSGNO) != m_iSndCurrMsgNo ) {
+                     m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
+                     fprintf( stderr, "drop_msg msg_no: %u pace_rate: %u extra: %x\n",
+                             block->m_iMsgNo & MASK_MSGNO,
+                             (uint32_t)(send_rate * 1000),
+                             block->m_iExtra
+                             );
+                 }
+                 if ( (block->m_iMsgNo & MASK_MSGNO) == m_iSndDropMsgNo )
+                     continue;
+                 else
+                     break;
+             }
+             */
+
              if ( block ) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
                 m_pRateSample->onPktSent(block, enter_ts + (ts - entertime) / m_ullCPUFrequency );
+             }
+             else {
+                 m_dequeueTrace.clear();
              }
          }
          else {
@@ -2673,6 +2687,13 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          return 0;
       }
 
+   }
+
+   m_dequeueTrace.push_back( ts ); 
+   // first 100,000 us
+   while( m_dequeueTrace.size() > 5 &&
+           m_dequeueTrace.front() < ( ts - 100000 ) ) {
+       m_dequeueTrace.pop_front();
    }
 
    packet.m_iID = m_PeerID;

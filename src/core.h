@@ -346,6 +346,7 @@ private: // Sending related data
    volatile double m_dPacingRate;
    volatile double m_dVideoRate;
    volatile double m_dBtlBw;
+   std::deque<uint64_t> m_dequeueTrace; 
    bool m_bLostRecovery;
 
    volatile int32_t m_iSndLastAck;              // Last ACK received
@@ -354,6 +355,7 @@ private: // Sending related data
    volatile int32_t m_iSndHighSeqNo;            // The largest sequence number that has been sent (won't change after timeout)
    volatile int32_t m_iSndCurrSeqNo;            // The last seq that has been sent              
    volatile int32_t m_iSndCurrMsgNo;            // The last msg that has been sent
+   volatile int32_t m_iSndDropMsgNo;
    int32_t m_iLastDecSeq;                       // Sequence number sent last decrease occurs
    uint64_t m_ullSndLastAck2Time;               // The time when last ACK2 was sent back
 

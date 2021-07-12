@@ -91,7 +91,7 @@ public:
 
    void setDropFlag( int );
 
-   void addBuffer(const char* data, int len, int ttl = -1, bool order = false, uint32_t extra_field = 0);
+   int32_t addBuffer(const char* data, int len, int ttl = -1, bool order = false, uint32_t extra_field = 0);
 
       // Functionality:
       //    Read a block of data from file and insert it into the sending list.

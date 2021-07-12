@@ -133,7 +133,6 @@ void CSndBuffer::setDropFlag( int priority )
             if ( priority <= msg_priority && !p->m_Drop ) {
                 p->m_Drop = true;
                 if ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) {
-                    //fprintf( stderr, "drop_msg msg_no: %u\n", p->m_iMsgNo & 0x1fffffff );
                     fprintf( stdout, "drop_msg msg_no: %u\n", p->m_iMsgNo & 0x1fffffff );
                 }
             }
@@ -142,7 +141,7 @@ void CSndBuffer::setDropFlag( int priority )
     }
 }
 
-void CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, uint32_t extra_field)
+int32_t CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, uint32_t extra_field)
 {
    int size = len / m_iMSS;
    if ((len % m_iMSS) != 0)
@@ -193,9 +192,11 @@ void CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, u
    m_iCount += size;
    CGuard::leaveCS(m_BufLock);
 
+   int32_t ret = m_iNextMsgNo;
    m_iNextMsgNo ++;
    if (m_iNextMsgNo == CMsgNo::m_iMaxMsgNo)
       m_iNextMsgNo = 1;
+   return ret;
 }
 
 int CSndBuffer::addBufferFromFile(fstream& ifs, int len)

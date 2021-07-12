@@ -91,7 +91,8 @@ int main(int argc, char* argv[])
     uint32_t    frame_no = 0;
     uint32_t    PREEMPT_MUSK = 0x2000000;
     float       frame_gap = 33.333;
-    int64_t ts, ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+    uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+    uint64_t ts = ts_begin;
 
     while (true) {
         msg = trace_array[ frame_no % trace_array.size() ];

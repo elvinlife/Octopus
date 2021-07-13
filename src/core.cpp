@@ -1699,6 +1699,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
 
 void CUDT::CCUpdate()
 {
+    assert( m_ullCPUFrequency == 1);
    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
    m_dCongestionWindow = m_pCC->m_dCWndSize;
 
@@ -2555,27 +2556,14 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 {
    int payload = 0;
 
-   uint64_t entertime;
-   CTimer::rdtsc(entertime);
-   uint64_t enter_ts = CTimer::getTime();
+   uint64_t entertime = CTimer::getTime();
 
-   if ((0 != m_ullTargetTime) && (entertime > m_ullTargetTime))
-      m_ullTimeDiff += entertime - m_ullTargetTime;
-
-   if (m_ullTimeDiff >= m_ullInterval)
-   {
-       ts = entertime;
-       m_ullTimeDiff -= m_ullInterval;
-   }
-   else
-   {
-       ts = entertime + m_ullInterval - m_ullTimeDiff;
-       m_ullTimeDiff = 0;
-   }
 
    CCUpdate();
 
    string send_pkt("send_pkt");
+
+   Block* block = NULL;
 
    // Loss retransmission always has higher priority.
    if ((packet.m_iSeqNo = m_pScoreBoard->getNextRetran()) >= 0)
@@ -2590,7 +2578,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       if (CSeqNo::seqcmp( packet.m_iSeqNo, m_iSndHighSeqNo ) > 0 )
           throw std::runtime_error("resend seq bigger than SndHighSeqNo!\n");
 
-      Block* block = m_pSndBuffer->readData( offset, packet.m_iSeqNo );
+      block = m_pSndBuffer->readData( offset, packet.m_iSeqNo );
 
       packet.m_pcData = block->m_pcData;
       packet.m_iMsgNo = block->m_iMsgNo;
@@ -2602,6 +2590,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       ++ m_iTraceRetrans;
       ++ m_iRetransTotal;
       send_pkt = string("resend_pkt");
+      block->is_retrans_ = true;
    }
    else
    {
@@ -2612,7 +2601,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       if (cwnd >= CSeqNo::seqlen(m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo))
               || ( m_bLostRecovery && m_pRateSample->pktsInFlight() <= cwnd ) )
       {
-         Block* block = NULL;
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
              /*
              int send_rate = m_dPacingRate > m_dBtlBw ? m_dPacingRate : m_dBtlBw;
@@ -2631,7 +2619,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
              }
              if ( block ) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
-                m_pRateSample->onPktSent(block, enter_ts + (ts - entertime) / m_ullCPUFrequency );
+                //m_pRateSample->onPktSent(block, ts);
              }
          }
          else {
@@ -2639,6 +2627,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
                     CSeqNo::seqoff( m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo) ),
                     CSeqNo::incseq(m_iSndCurrSeqNo)
                     );
+            send_pkt = string("resend_pkt");
             block->is_retrans_ = true;
          }
          if (block)
@@ -2672,27 +2661,47 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          ts = 0;
          return 0;
       }
-
    }
 
    packet.m_iID = m_PeerID;
    packet.setLength(payload);
+
+   uint64_t deliver_interval = (uint64_t) m_ullInterval * (packet.getLength() + 52) / 1500.0; 
+   if ((0 != m_ullTargetTime) && (entertime > m_ullTargetTime))
+      m_ullTimeDiff += entertime - m_ullTargetTime;
+
+   if (m_ullTimeDiff >= deliver_interval)
+   {
+       ts = entertime;
+       m_ullTimeDiff -= deliver_interval;
+   }
+   else
+   {
+       ts = entertime + deliver_interval - m_ullTimeDiff;
+       m_ullTimeDiff = 0;
+   }
+
+   if ( block && !block->is_retrans_ ) {
+       m_pRateSample->onPktSent(block, ts);
+   }
+
 
    ++ m_llTraceSent;
    ++ m_llSentTotal;
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d send_ts: %.2fms cumu_diff: %ldms\n",
+   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d send_ts: %.2fms ullInterval: %ldms\n",
            send_pkt.c_str(),
            packet.m_iSeqNo,
            packet.getMsgNo(),
            packet.m_nHeader[2],
-           packet.getLength() + CPacket::m_iPktHdrSize,
+           //packet.getLength() + CPacket::m_iPktHdrSize,
+           packet.getLength() + 52,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
-           (enter_ts +  (ts - entertime) / m_ullCPUFrequency) / 1000.0,
-           m_ullTimeDiff
+           ts / 1000.0,
+           m_ullInterval
            );
 
    m_ullTargetTime = ts;

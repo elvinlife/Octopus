@@ -100,8 +100,8 @@ bool RateSample::updateRateSample(Block *block)
     // only update the ack_elapsed if the cumu_delivered of the acked block increases to avoid overestimation
     bool is_valid = block->delivered_ > prior_delivered_;
 
-    cumu_delivered_ += acked_sacked_ * PacketMTU;
-    //cumu_delivered_ += acked_sacked_ * (block->m_iLength + 52); // application header(24) + udp(8) + ip(20)
+    //cumu_delivered_ += acked_sacked_ * PacketMTU;
+    cumu_delivered_ += acked_sacked_ * (block->m_iLength + 52); // application header(24) + udp(8) + ip(20)
     cumu_delivered_ts_ = delivered_mstamp_;
 
     //if ( is_valid ) {

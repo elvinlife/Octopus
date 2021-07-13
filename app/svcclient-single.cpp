@@ -19,7 +19,6 @@ using namespace std::chrono;
 
 struct FrameInfo {
     int msg_id_;
-    uint32_t layer_id_;
     int size_;
     float ssim_;
     uint32_t rate_;
@@ -74,22 +73,17 @@ int main(int argc, char* argv[])
     freeaddrinfo(peer);
 
     FrameInfo msg;
-    int     gop_size = 0;
-    int     num_layers = 3;
     int     max_bitrate = 0;
 
     //vector<FrameInfo> trace_array;
     map<int, vector<FrameInfo>> trace_arrays;
     std::ifstream ifs( argv[3] );
-    ifs >> gop_size >> num_layers;
     while( ifs >> max_bitrate >> \
             msg.msg_id_ >> \
-            msg.layer_id_ >> \
             msg.size_ >> \
-            msg.rate_ >> \
             msg.ssim_ ) {
         max_bitrate = (int) max_bitrate * 15.0 / 14.0;
-        msg.rate_ = (int)msg.rate_ * 1500.0 /1400.0;
+        msg.rate_ = max_bitrate;
         if ( trace_arrays.find(max_bitrate) == trace_arrays.end() ) {
             trace_arrays[max_bitrate] = vector<FrameInfo>();
         }
@@ -98,15 +92,13 @@ int main(int argc, char* argv[])
     ifs.close();
 
     uint32_t    frame_no = 0;
-    uint32_t    gop_no = 0;
-    float       frame_gap = 33.333;
+    uint64_t    frame_gap = 33;
     int         bbr_rate = 0; 
     int         key_trace = 0;
     int         smallest_key = 1 << 20;
+    int         gop_size = 9;
     const uint32_t PREEMPT_MUSK = 0x2000000;
     UDT::TRACEINFO perf;
-    uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-    uint64_t ts = ts_begin;
 
     while (true) {
         if (frame_no % gop_size == 0) {
@@ -115,11 +107,10 @@ int main(int argc, char* argv[])
                 cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
                 break;
             }
-            gop_no += 1;
             bbr_rate = perf.pacingRate;
             key_trace = 0;
             for (auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
-                if ( it->first < bbr_rate ) {
+                if ( it->first <= bbr_rate ) {
                     key_trace = it->first;
                 }
                 if ( it->first < smallest_key )
@@ -131,45 +122,44 @@ int main(int argc, char* argv[])
                     key_trace, bbr_rate );
         }
 
-        for (int i = 0; i < num_layers; ++i) {
-            int msg_no = frame_no * num_layers + i;
-            msg = trace_arrays[key_trace][ msg_no % trace_arrays[key_trace].size() ];
+        uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+        uint64_t ts = ts_begin;
 
-            uint32_t wildcard = (msg.layer_id_+1) << 29 | msg.rate_;
-            if ( i == 0 )
-                wildcard = (msg.layer_id_+1) << 29;
-            if ( frame_no % gop_size == 0 && i == 0) {
-                wildcard = wildcard | 1 << 26 | PREEMPT_MUSK;
-            }
+        msg = trace_arrays[key_trace][ frame_no % trace_arrays[key_trace].size() ];
 
-            std::string msg_payload( msg.size_, 'a' );
-            int ss = 0;
+        uint32_t wildcard;
+        if ( frame_no % gop_size == 0 )
+            wildcard = 1 << 29 | 1 << 26 | PREEMPT_MUSK;
+        else if ( ( frame_no % gop_size ) % 2 == 1 )
+            wildcard = 3 << 29 | 4 << 26 | PREEMPT_MUSK;
+        else
+            wildcard = 2 << 29 | 3 << 26 | PREEMPT_MUSK;
 
-            if (UDT::ERROR == ( ss = UDT::sendmsg( client, msg_payload.c_str(), msg_payload.size(), (1<<20), 0, wildcard ) ) ) {
-                cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
-                exit( -1 );
-            }
+        std::string msg_payload( msg.size_, 'a' );
+        int ss = 0;
 
-            if ( ss != msg.size_ ) {
-                fprintf(stderr, "Error, sendmsg size mismatch: %u, ss:%u\n", msg.size_, ss);
-                exit(0);
-            }
-
-            ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
-            fprintf( stdout, "send_msg msg_no: %u size: %d layer_id: %d ssim: %.2f ts_send: %lu key_trace: %d frame_no: %d real_time: %.2fms\n",
-                    msg_no,
-                    msg.size_,
-                    msg_no % num_layers,
-                    msg.ssim_,
-                    ts,
-                    key_trace,
-                    msg_no / num_layers,
-                    CTimer::getTime() / 1000.0 );
+        if ( UDT::ERROR == ( ss = UDT::sendmsg( client, msg_payload.c_str(), msg_payload.size(), (1<<20), 0, wildcard ) ) ) {
+            cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
+            exit( -1 );
         }
 
+        if ( ss != msg.size_ ) {
+            fprintf(stderr, "Error, sendmsg size mismatch: %u, ss:%u\n", msg.size_, ss);
+            exit(0);
+        }
+
+        ts = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
+        fprintf( stdout, "send_msg msg_no: %u size: %d ssim: %.2f ts_send: %lu key_trace: %d real_time: %.2fms\n",
+                frame_no,
+                msg.size_,
+                msg.ssim_,
+                ts,
+                key_trace,
+                CTimer::getTime() / 1000.0 );
+
         frame_no ++;
-        if ( ts-ts_begin < (uint64_t)(frame_no * frame_gap) ) {
-            std::this_thread::sleep_for( milliseconds( (uint64_t)(frame_no * frame_gap) - (ts - ts_begin) ) );
+        if ( ts-ts_begin < frame_gap ) {
+            std::this_thread::sleep_for( milliseconds( frame_gap - (ts-ts_begin) ) );
         }
     }
 

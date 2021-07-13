@@ -137,6 +137,7 @@ class CBBR: public CCC
         inline void initPacingRate()
         {
             pacing_rate_ = pacing_gain_ * getThroughput(BBRMinPipeCwnd, BBRInitRTT);
+            m_dPktSndPeriod = PacketMTU / pacing_rate_ / Ratio;
         }
 
         virtual void onAck ( Block* block, const RateSample* rs ) override
@@ -498,7 +499,7 @@ class CBBR: public CCC
         static const int BtlBWFilterMinWnd  = 600000;
 
         //static const uint64_t RTpropFilterLen   = 1000000000;
-        static const uint64_t RTpropFilterLen   = 100000000;
+        static const uint64_t RTpropFilterLen   = 1000000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
         static const int BBRMinPipeCwnd         = 4;
         static const int BBRInitRTT             = 300000;

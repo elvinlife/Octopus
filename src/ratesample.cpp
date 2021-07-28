@@ -53,6 +53,7 @@ void RateSample::onAckSacked(Block* block, int type)
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ * 8;
+        /*
         fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms "
                 "sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d\n", 
                 delivery_rate_, 
@@ -64,6 +65,7 @@ void RateSample::onAckSacked(Block* block, int type)
                 block->delivered_ts_ / 1000,
                 pkts_in_flight_
                 );
+                */
     }
     block->delivered_ts_ = 0;
 }

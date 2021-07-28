@@ -2599,34 +2599,38 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
               || ( m_bLostRecovery && m_pRateSample->pktsInFlight() <= cwnd ) )
       {
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
-             double send_rate = m_dPacingRate;
+             /*
              while ( (block = m_pSndBuffer->readCurrData()) != NULL ) {
                 if ( !block->m_Drop )
                     break;
              }
+             */
+
              /*
              double send_rate = 99999999.0;
              if ( m_dequeueTrace.size() >= 5 )
                  send_rate = ( m_dequeueTrace.size() - 1 ) * 12000.0 / ( m_dequeueTrace.back() - m_dequeueTrace.front() );
+                 */
+             
+             double send_rate = m_dVideoRate;
              while ( ( block = m_pSndBuffer->readCurrData() ) != NULL ) {
                  if ( block->m_Drop )
                      continue;
                  else if ( (block->m_iMsgNo & 0xc0000000) == 0x80000000 &&
                          (block->m_iExtra & MASK_BITTHRESH) > (uint32_t)(send_rate * 1000) &&
-                         (block->m_iMsgNo & MASK_MSGNO) != m_iSndCurrMsgNo ) {
+                         (int32_t)(block->m_iMsgNo & MASK_MSGNO) != m_iSndCurrMsgNo ) {
                      m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
-                     fprintf( stderr, "drop_msg msg_no: %u pace_rate: %u extra: %x\n",
+                     fprintf( stdout, "drop_msg msg_no: %u pace_rate: %u extra: %x\n",
                              block->m_iMsgNo & MASK_MSGNO,
                              (uint32_t)(send_rate * 1000),
                              block->m_iExtra
                              );
                  }
-                 if ( (block->m_iMsgNo & MASK_MSGNO) == m_iSndDropMsgNo )
+                 if ( (int32_t)(block->m_iMsgNo & MASK_MSGNO) == m_iSndDropMsgNo )
                      continue;
                  else
                      break;
              }
-             */
 
              if ( block ) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);

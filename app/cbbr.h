@@ -144,6 +144,24 @@ class CBBR: public CCC
         {
             updateModelAndState( block, rs );
             updateControlParameters();
+
+            if (round_start_) {
+                fprintf( stderr, "bbr_status rate: %.2f cwnd: %.2f "
+                        "delivery_rate: %.2f "
+                        "videorate: %.2f btl_bw: %.2f "
+                        "rt_prop: %ld pacing_gain_: %.2f "
+                        "round: %d ts: %ld ms\n",
+                        pacing_rate_,
+                        m_dCWndSize,
+                        rs->deliveryRate(),
+                        m_dVideoRate,
+                        btl_bw_,
+                        rt_prop_,
+                        pacing_gain_,
+                        round_count_,
+                        CTimer::getTime() / 1000
+                       );
+            }
         }
 
         virtual void onTimeout () override
@@ -387,22 +405,6 @@ class CBBR: public CCC
             m_dVideoRate = pacing_rate_ > btl_bw_ ? pacing_rate_ : btl_bw_;
             //m_dVideoRate = pacing_rate_ > 1.25 * btl_bw_ ? pacing_rate_ : 1.25 * btl_bw_;
 
-            fprintf( stderr, "bbr_status rate: %.2f cwnd: %.2f "
-                    "videorate: %.2f btl_bw: %.2f "
-                    "rt_prop: %ld pacing_gain_: %.2f "
-                    "round: %d round_start: %d "
-                    "full_bw_cnt: %d ts: %ld ms\n",
-                    pacing_rate_,
-                    m_dCWndSize,
-                    m_dVideoRate,
-                    btl_bw_,
-                    rt_prop_,
-                    pacing_gain_,
-                    round_count_,
-                    round_start_ ? 1 : 0,
-                    full_bw_count_,
-                    CTimer::getTime() / 1000
-                    );
         }
 
         void setPacingRateWithGain( double gain )
@@ -416,9 +418,9 @@ class CBBR: public CCC
         void setSendQuantum()
         {
             if ( pacing_rate_ < 12 )
-                send_quantum_ = 2;
+                send_quantum_ = 3;
             else if ( pacing_rate_ < 24 )
-                send_quantum_ = 4;
+                send_quantum_ = 5;
             else
                 send_quantum_ = (pacing_rate_ / 6.0) > 43 ? 43 : (pacing_rate_ / 6.0);
         }
@@ -499,7 +501,7 @@ class CBBR: public CCC
         static const int BtlBWFilterMinWnd  = 600000;
 
         //static const uint64_t RTpropFilterLen   = 1000000000;
-        static const uint64_t RTpropFilterLen   = 1000000000;
+        static const uint64_t RTpropFilterLen   = 100000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
         static const int BBRMinPipeCwnd         = 4;
         static const int BBRInitRTT             = 300000;

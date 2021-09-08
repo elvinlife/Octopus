@@ -194,7 +194,7 @@ struct CPerfMon
    int byteAvailSndBuf;                 // available UDT sender buffer size
    int byteAvailRcvBuf;                 // available UDT receiver buffer size
 
-   int bbrMode;
+   bool isLimited;
    int pacingRate;
 };
 

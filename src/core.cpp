@@ -1663,6 +1663,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
    perf->msRTT = m_iRTT/1000.0;
    perf->mbpsBandwidth = m_iBandwidth * m_iPayloadSize * 8.0 / 1000000.0;
 
+   perf->isLimited = m_pRateSample->isAppLimited();
    perf->pacingRate = (int)(m_dVideoRate * 1024);
 
    #ifndef WIN32
@@ -2665,6 +2666,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          }
          else
          {
+             checkAppLimited();
              fprintf( stderr, "SndBuffer empty!\n" );
              m_ullTargetTime = 0;
              m_ullTimeDiff = 0;

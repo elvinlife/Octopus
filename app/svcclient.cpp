@@ -78,7 +78,6 @@ int main(int argc, char* argv[])
     int     num_layers = 3;
     int     max_bitrate = 0;
 
-    //vector<FrameInfo> trace_array;
     map<int, vector<FrameInfo>> trace_arrays;
     std::ifstream ifs( argv[3] );
     ifs >> gop_size >> num_layers;
@@ -102,7 +101,8 @@ int main(int argc, char* argv[])
     float       frame_gap = 33.333;
     int         bbr_rate = 0; 
     int         key_trace = 0;
-    int         smallest_key = 1 << 20;
+    int         last_trace = 0;
+    int         smallest_key = trace_arrays.begin()->first;
     const uint32_t PREEMPT_MUSK = 0x2000000;
     UDT::TRACEINFO perf;
     uint64_t ts_begin = duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count();
@@ -117,18 +117,39 @@ int main(int argc, char* argv[])
             }
             gop_no += 1;
             bbr_rate = perf.pacingRate;
+            /*
+            if ( perf.isLimited ) {
+                for( auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
+                    if ( it->first > last_trace ) {
+                        key_trace = it->first;
+                        break;
+                    }
+                }
+            }
+            else {
+                key_trace = 0;
+                for (auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
+                    if ( it->first < bbr_rate ) {
+                        key_trace = it->first;
+                    }
+                }
+                if ( key_trace == 0 )
+                    key_trace = smallest_key;
+                fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d, is_limit: %d\n",
+                        key_trace, bbr_rate, perf.isLimited );
+            }
+            */
             key_trace = 0;
             for (auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
                 if ( it->first < bbr_rate ) {
                     key_trace = it->first;
                 }
-                if ( it->first < smallest_key )
-                    smallest_key = it->first;
             }
             if ( key_trace == 0 )
                 key_trace = smallest_key;
-            fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d\n",
-                    key_trace, bbr_rate );
+            fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d, is_limit: %d\n",
+                    key_trace, bbr_rate, perf.isLimited );
+            last_trace = key_trace;
         }
 
         for (int i = 0; i < num_layers; ++i) {

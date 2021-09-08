@@ -100,8 +100,14 @@ int main(int argc, char* argv[])
         if (frame_no % gop_size == 0) {
             wildcard = 1 << 29 | 1 << 26 | PREEMPT_MUSK;
         }
-        else {
+        else if ( (frame_no % gop_size ) % 2 == 1 ) {
+            wildcard = 3 << 29 | 3 << 26 | PREEMPT_MUSK;
+        }
+        else if ( (frame_no % gop_size ) % 2 == 0 ) {
             wildcard = 2 << 29 | 2 << 26 | PREEMPT_MUSK;
+        }
+        if ( (frame_no % gop_size) == 4 ) {
+            wildcard = 1 << 29 | 2 << 26 | PREEMPT_MUSK;
         }
 
         std::string msg_payload( msg.size_, 'a' );

@@ -122,20 +122,17 @@ CSndBuffer::~CSndBuffer()
 void CSndBuffer::setDropFlag( int priority )
 {
     Block* p = m_pCurrBlock;
-    bool begin_drop = false;
     while (p != m_pLastBlock) {
         // the beginning of one message
-        if ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) {
-            begin_drop = true;
-        }
-        if (begin_drop) {
-            int msg_priority = (p->m_iExtra & 0xe0000000) >> 29;
-            if ( priority <= msg_priority && !p->m_Drop ) {
-                p->m_Drop = true;
-                if ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) {
-                    fprintf( stdout, "drop_msg msg_no: %u\n", p->m_iMsgNo & 0x1fffffff );
-                }
-            }
+        if ( ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) && !p->m_Drop) {
+           int msg_priority = (p->m_iExtra & 0xe0000000) >> 29;
+           int queue_time = ( CTimer::getTime() - p->m_OriginTime ) / 1000;
+           int slack_time = (p->m_iExtra & 0x01ff0000) >> 16;
+           if ( priority <= msg_priority && queue_time > slack_time ) {
+              p->m_Drop = true;
+              fprintf( stdout, "drop_msg msg_no: %u queue_time: %u\n",
+                  p->m_iMsgNo & 0x1fffffff, queue_time);
+           }
         }
         p = p->m_pNext;
     }

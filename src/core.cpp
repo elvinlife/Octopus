@@ -80,7 +80,7 @@ const int32_t CMsgNo::m_iMsgNoTH = 0xFFFFFFF;
 const int32_t CMsgNo::m_iMaxMsgNo = 0x1FFFFFFF;
 
 const uint32_t MASK_MSGNO = 0x1FFFFFFF;
-const uint32_t MASK_BITTHRESH = 0x00FFFFFF;
+const uint32_t MASK_BITTHRESH = 0x0000FFFF;
 
 const int CUDT::m_iVersion = 4;
 const int CUDT::m_iSYNInterval = 10000;
@@ -531,8 +531,10 @@ void CUDT::open()
    m_pRNode->m_pPrev = m_pRNode->m_pNext = NULL;
    m_pRNode->m_bOnList = false;
 
-   m_iRTT = 10 * m_iSYNInterval;
-   m_iRTTVar = m_iRTT >> 1;
+   //m_iRTT = 10 * m_iSYNInterval;
+   //m_iRTTVar = m_iRTT >> 1;
+   m_iRTT = 0;
+
    m_ullCPUFrequency = CTimer::getCPUFrequency();
 
    // set up the timers
@@ -817,7 +819,7 @@ POST_CONNECT:
    m_pCC->setMaxCWndSize(m_iFlowWindowSize);
    m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
    m_pCC->setRcvRate(m_iDeliveryRate);
-   m_pCC->setRTT(m_iRTT);
+   //m_pCC->setRTT(m_iRTT);
    m_pCC->setBandwidth(m_iBandwidth);
    m_pCC->init();
 
@@ -926,7 +928,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    m_pCC->setMaxCWndSize(m_iFlowWindowSize);
    m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
    m_pCC->setRcvRate(m_iDeliveryRate);
-   m_pCC->setRTT(m_iRTT);
+   //m_pCC->setRTT(m_iRTT);
    m_pCC->setBandwidth(m_iBandwidth);
    m_pCC->init();
 
@@ -1037,7 +1039,7 @@ void CUDT::close()
       CInfoBlock ib;
       ib.m_iIPversion = m_iIPversion;
       CInfoBlock::convert(m_pPeerAddr, m_iIPversion, ib.m_piIP);
-      ib.m_iRTT = m_iRTT;
+      //ib.m_iRTT = m_iRTT;
       ib.m_iBandwidth = m_iBandwidth;
       m_pCache->update(&ib);
 
@@ -1703,6 +1705,7 @@ void CUDT::CCUpdate()
 
    m_dPacingRate = 12000 / m_pCC->m_dPktSndPeriod;
    m_dBtlBw = m_pCC->m_dBtlBw;
+   m_iRTT = m_pCC->m_iRTT;
    m_dVideoRate = m_pCC->m_dVideoRate;
 
    /*
@@ -2556,7 +2559,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    uint64_t entertime = CTimer::getTime();
 
-
    CCUpdate();
 
    string send_pkt("send_pkt");
@@ -2615,16 +2617,26 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
              
              double send_rate = m_dVideoRate;
              while ( ( block = m_pSndBuffer->readCurrData() ) != NULL ) {
-                 if ( block->m_Drop )
-                     continue;
+                 uint32_t queue_time = CTimer::getTime() - block->m_OriginTime;
+                 int new_slack_time = ((block->m_iExtra & 0x01ff0000) >> 16) - ( queue_time + m_iRTT / 2 ) / 1000;
+                 block->m_iExtra = block->m_iExtra & 0xfe00ffff;
+                 if ( new_slack_time >= 0 ) {
+                     block->m_iExtra = block->m_iExtra | new_slack_time << 16;
+                 }
+
+                 if ( block->m_Drop ) {
+                    m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
+                 }
                  else if ( (block->m_iMsgNo & 0xc0000000) == 0x80000000 &&
-                         (block->m_iExtra & MASK_BITTHRESH) > (uint32_t)(send_rate * 1000) &&
-                         (int32_t)(block->m_iMsgNo & MASK_MSGNO) != m_iSndCurrMsgNo ) {
+                        new_slack_time <= 0 &&
+                        (block->m_iExtra & MASK_BITTHRESH) > (uint32_t)(send_rate * 1000) &&
+                        (int32_t)(block->m_iMsgNo & MASK_MSGNO) != m_iSndCurrMsgNo ) {
                      m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
-                     fprintf( stdout, "drop_msg msg_no: %u pace_rate: %u extra: %x\n",
+                     fprintf( stdout, "drop_msg msg_no: %u pace_rate: %u bitrate: %u queue_time: %u\n",
                              block->m_iMsgNo & MASK_MSGNO,
                              (uint32_t)(send_rate * 1000),
-                             block->m_iExtra
+                             block->m_iExtra & MASK_BITTHRESH,
+                             queue_time
                              );
                  }
                  if ( (int32_t)(block->m_iMsgNo & MASK_MSGNO) == m_iSndDropMsgNo )
@@ -2683,12 +2695,14 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
       }
    }
 
+   /*
    m_dequeueTrace.push_back( ts ); 
    // first 100,000 us
    while( m_dequeueTrace.size() > 5 &&
            m_dequeueTrace.front() < ( ts - 100000 ) ) {
        m_dequeueTrace.pop_front();
    }
+   */
 
    packet.m_iID = m_PeerID;
    packet.setLength(payload);

@@ -401,6 +401,7 @@ class CBBR: public CCC
             setCwnd();
             m_dPktSndPeriod = PacketMTU / pacing_rate_ / Ratio;
             m_dBtlBw = btl_bw_;
+            m_iRTT = (int)rt_prop_;
             //m_dVideoRate = btl_bw_;
             m_dVideoRate = pacing_rate_ > btl_bw_ ? pacing_rate_ : btl_bw_;
             //m_dVideoRate = pacing_rate_ > 1.25 * btl_bw_ ? pacing_rate_ : 1.25 * btl_bw_;

@@ -2613,50 +2613,48 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
               || ( m_bLostRecovery && m_pRateSample->pktsInFlight() <= cwnd ) )
       {
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
-             double send_rate = m_dVideoRate;
-             while ( ( block = m_pSndBuffer->readCurrData() ) != NULL ) {
-                 uint32_t queue_time = CTimer::getTime() - block->m_OriginTime;
-                 int new_slack_time = ((block->m_iExtra & 0x01ff0000) >> 16) - ( queue_time + m_iRTT / 2 ) / 1000;
-                 block->m_iExtra = block->m_iExtra & 0xfe00ffff;
-                 if ( new_slack_time >= 0 ) {
-                     block->m_iExtra = block->m_iExtra | new_slack_time << 16;
-                 }
-
-                 if ( block->m_Drop ) {
-                    m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
-                 }
-                 else if ( (block->m_iMsgNo & 0xc0000000) == 0x80000000 &&
-                        new_slack_time <= 0 &&
-                        (block->m_iExtra & MASK_BITTHRESH) > (uint32_t)(send_rate * 1000) &&
-                        (int32_t)(block->m_iMsgNo & MASK_MSGNO) != m_iSndCurrMsgNo ) {
-                     m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
-                     fprintf( stdout, "drop_msg msg_no: %u pace_rate: %u bitrate: %u queue_time: %u\n",
-                             block->m_iMsgNo & MASK_MSGNO,
-                             (uint32_t)(send_rate * 1000),
-                             block->m_iExtra & MASK_BITTHRESH,
-                             queue_time
-                             );
-                 }
-                 if ( (int32_t)(block->m_iMsgNo & MASK_MSGNO) == m_iSndDropMsgNo )
-                     continue;
-                 else
-                     break;
-             }
-
-             if ( block ) {
-                block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
-             }
-             else {
-                 m_dequeueTrace.clear();
-             }
+            double send_rate = m_dVideoRate;
+            while ( ( block = m_pSndBuffer->readCurrData() ) != NULL ) {
+					// set the new slack time based on queueing in transport buffer
+               uint32_t queue_time = CTimer::getTime() - block->m_OriginTime;
+               int new_slack_time = ((block->m_iExtra & 0x01ff0000) >> 16) - ( queue_time + m_iRTT / 2 ) / 1000;
+               block->m_iExtra = block->m_iExtra & 0xfe00ffff;
+               if ( new_slack_time >= 0 ) {
+                   block->m_iExtra = block->m_iExtra | new_slack_time << 16;
+               }
+					// set the message in drop based on drop_flag or current bandwidth
+               if ( block->m_Drop ) {
+                  m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
+               }
+               else if ( (block->m_iMsgNo & 0xc0000000) == 0x80000000 &&
+                      new_slack_time <= 0 &&
+                      (block->m_iExtra & MASK_BITTHRESH) > (uint32_t)(send_rate * 1000) &&
+                      (int32_t)(block->m_iMsgNo & MASK_MSGNO) != m_iSndCurrMsgNo ) {
+                   m_iSndDropMsgNo = block->m_iMsgNo & MASK_MSGNO;
+                   fprintf( stdout, "drop_msg msg_no: %u pace_rate: %u bitrate: %u queue_time: %u\n",
+                           block->m_iMsgNo & MASK_MSGNO,
+                           (uint32_t)(send_rate * 1000),
+                           block->m_iExtra & MASK_BITTHRESH,
+                           queue_time
+                           );
+               }
+					// drop the packet if it belongs to message in drop
+               if ( (int32_t)(block->m_iMsgNo & MASK_MSGNO) == m_iSndDropMsgNo )
+                   continue;
+               else
+                   break;
+            }
+            if ( block ) {
+               block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
+            }
          }
          else {
             block = m_pSndBuffer->readData( 
                     CSeqNo::seqoff( m_iSndLastDataAck, CSeqNo::incseq(m_iSndCurrSeqNo) ),
                     CSeqNo::incseq(m_iSndCurrSeqNo)
                     );
-            send_pkt = string("resend_pkt");
-            block->is_retrans_ = true;
+            //send_pkt = string("resend_pkt");
+            //block->is_retrans_ = true;
          }
          checkAppLimited();
          if (block)
@@ -3046,7 +3044,7 @@ void CUDT::checkTimers()
    uint64_t next_exp_time;
    // temporarily set timeout to 400ms(3RTT)
    //next_exp_time = m_ullLastRspTime + m_pCC->m_iRTO * m_ullCPUFrequency;
-   next_exp_time = m_ullLastRspTime + 5000000 * m_ullCPUFrequency;
+   next_exp_time = m_ullLastRspTime + 2000000 * m_ullCPUFrequency;
 
    if (currtime > next_exp_time)
    {
@@ -3080,14 +3078,17 @@ void CUDT::checkTimers()
       // sender: Insert all the packets sent after last received acknowledgement into the sender loss list.
       if (m_pSndBuffer->getCurrBufSize() > 0)
       {
-         for ( int32_t seq = m_iSndLastDataAck ; seq <= m_iSndCurrSeqNo; ++seq ) {
-            int offset = CSeqNo::seqoff( m_iSndLastDataAck, seq ); 
-            Block* block = m_pSndBuffer->readData( offset, seq ); 
-            if ( block->is_reliable() )
-                m_iSndCurrSeqNo = seq;
-         }
-         m_iSndLastDataAck = m_iSndCurrSeqNo + 1;
-         m_iSndForward = m_iSndLastDataAck + 1;
+			uint64_t curr_ts = CTimer::getTime();
+			// reset all block states after curr_seq
+			for ( int32_t seq = m_iSndLastDataAck; seq <= m_iSndHighSeqNo; ++seq ) {
+				int offset = CSeqNo::seqoff( m_iSndLastDataAck, seq );
+				Block* block = m_pSndBuffer->readData( offset, seq );
+				block->delivered_ = 0;
+				block->delivered_ts_ = curr_ts;
+				block->first_sent_ts_ = curr_ts;
+			}
+			m_iSndCurrSeqNo = m_iSndLastDataAck;
+			m_iSndForward = m_iSndLastDataAck;
 
          m_pCC->onTimeout();
          m_pRateSample->onTimeout( m_iSndLastDataAck );

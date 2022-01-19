@@ -346,7 +346,6 @@ private: // Sending related data
    volatile double m_dPacingRate;
    volatile double m_dVideoRate;
    volatile double m_dBtlBw;
-   std::deque<uint64_t> m_dequeueTrace; 
    bool m_bLostRecovery;
 
    volatile int32_t m_iSndLastAck;              // Last ACK received

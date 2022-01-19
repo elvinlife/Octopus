@@ -35,11 +35,11 @@ void RateSample::onAckSacked(Block* block, int type)
     else if ( type == 2 ) {
         pkts_in_flight_ -= 1;
         acked_sacked_ = 1;
-        setPacketLost( true ); // is it appropriate?
+        setPacketLost( true );
     }
     else {
         acked_sacked_ = 0;
-        setPacketLost( true ); // is it appropriate?
+        setPacketLost( true );
     }
     updateRateSample( block );
 
@@ -54,18 +54,20 @@ void RateSample::onAckSacked(Block* block, int type)
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ * 8;
         
-        fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms "
-                "sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d\n", 
-                delivery_rate_, 
-                sample_delivered,
-                ack_elapsed_ / 1000,
-                send_elapsed_ / 1000,
-                block->sent_ts_ / 1000,
-                block->first_sent_ts_ / 1000,
-                block->delivered_ts_ / 1000,
-                pkts_in_flight_
-                );
-                
+    fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms "
+            "sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d"
+            "cumu_delivered: %dB prior_delivered: %dB\n", 
+            delivery_rate_, 
+            sample_delivered,
+            ack_elapsed_ / 1000,
+            send_elapsed_ / 1000,
+            block->sent_ts_ / 1000,
+            block->first_sent_ts_ / 1000,
+            block->delivered_ts_ / 1000,
+            pkts_in_flight_,
+            cumu_delivered_,
+            prior_delivered_
+            );    
     }
     block->delivered_ts_ = 0;
 }
@@ -79,7 +81,6 @@ void RateSample::onPktSent(Block* block, uint64_t send_ts)
     block->delivered_ = cumu_delivered_;
     block->delivered_ts_ = cumu_delivered_ts_;
     block->sent_ts_ = send_ts; 
-
     block->first_sent_ts_ = first_sent_ts_;
 }
 
@@ -87,7 +88,7 @@ void RateSample::onTimeout( int ack )
 {
     app_limited_ = 0;
     packet_lost_ = false;
-    // try not to consider retransmitted packets for bandwidth estimation
+    // not to consider retransmitted packets for bandwidth estimation
     highest_ack_ = ack;
 
     prior_delivered_ = 0;
@@ -116,19 +117,3 @@ bool RateSample::updateRateSample(Block *block)
     //}
     //return false;
 }
-
-/*
-void RateSample::updateRateSample(Block *block, bool real_ack)
-{
-    if (block->delivered_ts_ == 0)
-        return;
-
-    cumu_delivered_ += acked_sacked_ * PacketMTU;
-    cumu_delivered_ts_ = delivered_mstamp_;
-    if ( block->delivered_ > prior_delivered_ ) {
-        prior_delivered_ = block->delivered_;
-        prior_delivered_ts_ = block->delivered_ts_;
-        ack_elapsed_ = cumu_delivered_ts_ - block->delivered_ts_;
-    }
-}
-*/

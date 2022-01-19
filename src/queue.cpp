@@ -541,7 +541,9 @@ void CSndQueue::init(CChannel* c, CTimer* t)
 
          self->m_pChannel->sendto(addr, pkt);
          */
-         // it is time to send the next pkt
+
+         // pop from the sndlist first, and then sleep
+         // pop will trigger packData
          sockaddr* addr;
          CPacket pkt;
          if ( ( ts = self->m_pSndUList->pop(addr, pkt) ) == 0 )
@@ -552,9 +554,9 @@ void CSndQueue::init(CChannel* c, CTimer* t)
          if (currtime < ts)
             self->m_pTimer->sleepto(ts);
 
-         fprintf(stderr, "nic_send seq_id: %d msg_id: %d ts: %.2fms abs_ts: %.2fms\n",
-                 pkt.m_iSeqNo, pkt.m_iMsgNo,
-                 CTimer::getTime()/1000.0, CTimer::getAbsoluteTime()/1000.0 );
+         // fprintf(stderr, "nic_send seq_id: %d msg_id: %d ts: %.2fms abs_ts: %.2fms\n",
+         //         pkt.m_iSeqNo, pkt.m_iMsgNo,
+         //         CTimer::getTime()/1000.0, CTimer::getAbsoluteTime()/1000.0 );
 
          self->m_pChannel->sendto(addr, pkt);
       }

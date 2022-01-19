@@ -627,6 +627,12 @@ int CRcvBuffer::readMsg(char* data, int len)
           if (p == init_p) {
               memcpy(data, m_pUnit[p]->m_Packet.m_nHeader, headersize); 
               memcpy(data + headersize, m_pUnit[p]->m_Packet.m_pcData, unitsize);
+
+            //   char meta_data[40];
+            //   memcpy(meta_data, data + headersize, 40);
+            //   meta_data[39] = 0;
+            //   fprintf( stderr, "meta_data: %s\n", meta_data);
+
               data += (headersize + unitsize);
               rs -= (headersize + unitsize);
           }

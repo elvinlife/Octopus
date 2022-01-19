@@ -552,8 +552,9 @@ void CSndQueue::init(CChannel* c, CTimer* t)
          if (currtime < ts)
             self->m_pTimer->sleepto(ts);
 
-         //fprintf(stderr, "send_pkt seq_id: %d msg_id: %d ts: %ld real_time: %ld\n",
-         //        pkt.m_iSeqNo, pkt.m_iMsgNo, ts, CTimer::getTime() );
+         fprintf(stderr, "nic_send seq_id: %d msg_id: %d ts: %.2fms abs_ts: %.2fms\n",
+                 pkt.m_iSeqNo, pkt.m_iMsgNo,
+                 CTimer::getTime()/1000.0, CTimer::getAbsoluteTime()/1000.0 );
 
          self->m_pChannel->sendto(addr, pkt);
       }

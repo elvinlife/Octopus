@@ -57,6 +57,9 @@ written by
 #include <cmath>
 #include "md5.h"
 #include "common.h"
+#include <chrono>
+
+using namespace std::chrono;
 
 //bool CTimer::m_bUseMicroSecond = false;
 bool CTimer::m_bUseMicroSecond = true;
@@ -280,6 +283,11 @@ uint64_t CTimer::getTime()
       SetThreadAffinityMask(hCurThread, dwOldMask); 
       return GetTickCount() * 1000ULL;
    #endif
+}
+
+uint64_t CTimer::getAbsoluteTime()
+{
+   return duration_cast< microseconds >( system_clock::now().time_since_epoch() ).count() % 1000000000;
 }
 
 void CTimer::triggerEvent()

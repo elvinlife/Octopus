@@ -11,7 +11,7 @@ RateSample::RateSample()
     cumu_delivered_(0),
     cumu_delivered_ts_(CTimer::getTime()),
     first_sent_ts_(CTimer::getTime()),
-    is_app_limited_(false),
+    app_limited_(0),
     packet_lost_(false),
     pkts_in_flight_(0),
     highest_seq_sent_(0),
@@ -53,7 +53,7 @@ void RateSample::onAckSacked(Block* block, int type)
     int64_t sample_delivered = cumu_delivered_ - prior_delivered_;
     if (interval_ > 0) {
         delivery_rate_ = (float)sample_delivered / interval_ * 8;
-        /*
+        
         fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms "
                 "sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d\n", 
                 delivery_rate_, 
@@ -65,7 +65,7 @@ void RateSample::onAckSacked(Block* block, int type)
                 block->delivered_ts_ / 1000,
                 pkts_in_flight_
                 );
-                */
+                
     }
     block->delivered_ts_ = 0;
 }
@@ -85,7 +85,7 @@ void RateSample::onPktSent(Block* block, uint64_t send_ts)
 
 void RateSample::onTimeout( int ack )
 {
-    is_app_limited_ = false;
+    app_limited_ = 0;
     packet_lost_ = false;
     // try not to consider retransmitted packets for bandwidth estimation
     highest_ack_ = ack;

@@ -18,7 +18,7 @@ private:
     uint64_t cumu_delivered_ts_;
     uint64_t first_sent_ts_;
 
-    bool    is_app_limited_;
+    int     app_limited_;
     bool    packet_lost_;
 
     int     pkts_in_flight_;
@@ -39,8 +39,6 @@ public:
 
     int64_t cumuDelivered() const { return cumu_delivered_; }
 
-    bool    isAppLimited() const { return is_app_limited_; }
-
     int     pktsInFlight() const { return pkts_in_flight_; }
 
     bool    packetLost() const { return packet_lost_; }
@@ -49,8 +47,11 @@ public:
         packet_lost_ = lost;
     }
 
-    void    setAppLimited(bool limited) {
-        is_app_limited_ = limited;
+    int     getAppLimited() const{
+        return app_limited_;
+    }
+    void    setAppLimited(int limited) {
+        app_limited_ = limited;   
     }
 
     uint64_t delivered_mstamp_;

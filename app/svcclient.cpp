@@ -117,28 +117,7 @@ int main(int argc, char* argv[])
             }
             gop_no += 1;
             bbr_rate = perf.pacingRate;
-            /*
-            if ( perf.isLimited ) {
-                for( auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
-                    if ( it->first > last_trace ) {
-                        key_trace = it->first;
-                        break;
-                    }
-                }
-            }
-            else {
-                key_trace = 0;
-                for (auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
-                    if ( it->first < bbr_rate ) {
-                        key_trace = it->first;
-                    }
-                }
-                if ( key_trace == 0 )
-                    key_trace = smallest_key;
-                fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d, is_limit: %d\n",
-                        key_trace, bbr_rate, perf.isLimited );
-            }
-            */
+
             key_trace = 0;
             for (auto it = trace_arrays.begin(); it != trace_arrays.end(); ++it) {
                 if ( it->first < bbr_rate ) {
@@ -147,8 +126,8 @@ int main(int argc, char* argv[])
             }
             if ( key_trace == 0 )
                 key_trace = smallest_key;
-            fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d, is_limit: %d\n",
-                    key_trace, bbr_rate, perf.isLimited );
+            fprintf( stdout, "set video level: bitrate: %d, bbr_rate: %d, appLimited: %d\n",
+                    key_trace, bbr_rate, perf.appLimited );
             last_trace = key_trace;
         }
 

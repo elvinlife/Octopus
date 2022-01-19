@@ -59,9 +59,7 @@ written by
 #include "queue.h"
 #include "core.h"
 #include <string>
-#include <chrono>
 
-using namespace std::chrono;
 using namespace std;
 
 
@@ -113,7 +111,8 @@ CUDT::CUDT()
    m_bSynSending = true;
    m_bSynRecving = true;
    m_iFlightFlagSize = 25600;
-   m_iSndBufSize = 8192;
+   //m_iSndBufSize = 8192;
+   m_iSndBufSize = 1024;
    m_iRcvBufSize = 8192; //Rcv buffer MUST NOT be bigger than Flight Flag size
    m_Linger.l_onoff = 1;
    m_Linger.l_linger = 180;
@@ -1312,7 +1311,6 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t e
             else
             {
                uint64_t exptime = CTimer::getTime() + m_iSndTimeOut * 1000ULL;
-
                while (!m_bBroken && m_bConnected && !m_bClosing && ((m_iSndBufSize - m_pSndBuffer->getCurrBufSize()) * m_iPayloadSize < len) && (CTimer::getTime() < exptime))
                   WaitForSingleObject(m_SendBlockCond, DWORD((exptime - CTimer::getTime()) / 1000));
             }
@@ -1338,7 +1336,8 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder, uint32_t e
    if (0 == m_pSndBuffer->getCurrBufSize())
       m_llSndDurationCounter = CTimer::getTime();
 
-   checkAppLimited();
+   //checkAppLimited();
+
 
    // insert the user buffer into the sending list
    m_iSndCurrMsgNo = m_pSndBuffer->addBuffer(data, len, 0, inorder, extra_field);
@@ -1665,7 +1664,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
    perf->msRTT = m_iRTT/1000.0;
    perf->mbpsBandwidth = m_iBandwidth * m_iPayloadSize * 8.0 / 1000000.0;
 
-   perf->isLimited = m_pRateSample->isAppLimited();
+   perf->appLimited = m_pRateSample->getAppLimited();
    perf->pacingRate = (int)(m_dVideoRate * 1024);
 
    #ifndef WIN32
@@ -1699,7 +1698,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
 
 void CUDT::CCUpdate()
 {
-    assert( m_ullCPUFrequency == 1);
+   assert( m_ullCPUFrequency == 1);
    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
    m_dCongestionWindow = m_pCC->m_dCWndSize;
 
@@ -2098,12 +2097,14 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
            int32_t ack = ctrlpkt.getRcvAck();
            m_iSndLastAck = m_iSndLastDataAck;
 
-           fprintf(stderr, "recv_ack ack: %d SndLastDataAck: %d SndCurrSeq: %d rwnd: %d ts: %ldms\n",
+           fprintf(stderr, "recv_ack ack: %d SndLastDataAck: %d SndCurrSeq: %d "
+                  "rwnd: %d ts: %.2fms abs_ts: %.2fms\n",
                    ack,
                    m_iSndLastDataAck,
                    m_iSndCurrSeqNo,
                    ctrlpkt.getRcvWnd(),
-                   CTimer::getTime() / 1000);
+                   CTimer::getTime() / 1000.0,
+                   CTimer::getAbsoluteTime() / 1000.0);
 
            // check the validation of the ack
            if (CSeqNo::seqcmp(ack, CSeqNo::incseq(m_iSndHighSeqNo)) > 0)
@@ -2544,13 +2545,23 @@ void CUDT::checkPktForward()
 
 void CUDT::checkAppLimited()
 {
-    int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
-    if ( m_pSndBuffer->isEmpty() &&
-            cwnd >= m_pRateSample->pktsInFlight() ) {
-        m_pRateSample->setAppLimited( true );
-    }
-    else
-        m_pRateSample->setAppLimited( false );
+   //  int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
+   //  if ( m_pSndBuffer->isEmpty() &&
+   //          cwnd >= m_pRateSample->pktsInFlight() ) {
+   //      m_pRateSample->setAppLimited( true );
+   //  }
+   //  else
+   //      m_pRateSample->setAppLimited( false );
+
+   int cwnd = (m_iFlowWindowSize < (int)m_dCongestionWindow) ? m_iFlowWindowSize : (int)m_dCongestionWindow;
+   if ( m_pSndBuffer->isEmpty() && cwnd >= m_pRateSample->pktsInFlight() ) {
+      int limit = m_pRateSample->getAppLimited();
+      fprintf( stderr, "app_limited: %d cwnd: %d inflight: %d\n", limit, cwnd, m_pRateSample->pktsInFlight());
+      m_pRateSample->setAppLimited(limit + 1);
+   }
+   else {
+      m_pRateSample->setAppLimited(0);
+   }
 }
 
 int CUDT::packData(CPacket& packet, uint64_t& ts)
@@ -2602,19 +2613,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
               || ( m_bLostRecovery && m_pRateSample->pktsInFlight() <= cwnd ) )
       {
          if (m_iSndHighSeqNo == m_iSndCurrSeqNo) {
-             /*
-             while ( (block = m_pSndBuffer->readCurrData()) != NULL ) {
-                if ( !block->m_Drop )
-                    break;
-             }
-             */
-
-             /*
-             double send_rate = 99999999.0;
-             if ( m_dequeueTrace.size() >= 5 )
-                 send_rate = ( m_dequeueTrace.size() - 1 ) * 12000.0 / ( m_dequeueTrace.back() - m_dequeueTrace.front() );
-                 */
-             
              double send_rate = m_dVideoRate;
              while ( ( block = m_pSndBuffer->readCurrData() ) != NULL ) {
                  uint32_t queue_time = CTimer::getTime() - block->m_OriginTime;
@@ -2647,7 +2645,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
              if ( block ) {
                 block->seq_ = CSeqNo::incseq(m_iSndCurrSeqNo);
-                //m_pRateSample->onPktSent(block, ts);
              }
              else {
                  m_dequeueTrace.clear();
@@ -2661,6 +2658,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
             send_pkt = string("resend_pkt");
             block->is_retrans_ = true;
          }
+         checkAppLimited();
          if (block)
          {
             m_iSndCurrSeqNo = CSeqNo::incseq(m_iSndCurrSeqNo);
@@ -2678,8 +2676,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          }
          else
          {
-             checkAppLimited();
-             fprintf( stderr, "SndBuffer empty!\n" );
              m_ullTargetTime = 0;
              m_ullTimeDiff = 0;
              ts = 0;
@@ -2694,15 +2690,6 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
          return 0;
       }
    }
-
-   /*
-   m_dequeueTrace.push_back( ts ); 
-   // first 100,000 us
-   while( m_dequeueTrace.size() > 5 &&
-           m_dequeueTrace.front() < ( ts - 100000 ) ) {
-       m_dequeueTrace.pop_front();
-   }
-   */
 
    packet.m_iID = m_PeerID;
    packet.setLength(payload);
@@ -2732,16 +2719,18 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
 
    m_pCC->onPktSent(&packet);
 
-   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d send_ts: %.2fms ullInterval: %ldms\n",
+   fprintf( stderr, "%s seq: %d msg_no: %d wildcard: %x size: %d SndCumuAck: %d SndCurrSeq: %d "
+            "send_ts: %.2fms abs_ts: %.2fms ullInterval: %ldus\n",
            send_pkt.c_str(),
            packet.m_iSeqNo,
            packet.getMsgNo(),
-           packet.m_nHeader[2],
+           packet.m_iExtra,
            //packet.getLength() + CPacket::m_iPktHdrSize,
            packet.getLength() + 52,
            m_iSndLastDataAck,
            m_iSndCurrSeqNo,
            ts / 1000.0,
+           CTimer::getAbsoluteTime() / 1000.0,
            m_ullInterval
            );
 
@@ -2856,13 +2845,15 @@ int CUDT::processData(CUnit* unit)
    ++ m_llTraceRecv;
    ++ m_llRecvTotal;
 
-   fprintf(stderr, "recv_pkt seq: %d msg_no: %d RcvCurrSeq: %d RcvHighSeq: %d recv_buf: %d recv_ts: %ldms\n", 
+   fprintf(stderr, "recv_pkt seq: %d msg_no: %d RcvCurrSeq: %d RcvHighSeq: %d "
+                  "recv_buf: %d recv_ts: %.2fms abs_ts: %.2fms\n", 
            packet.m_iSeqNo, 
            packet.getMsgNo(),
            m_iRcvCurrSeqNo, 
            m_iRcvHighSeqNo, 
            m_pRcvBuffer->getAvailBufSize(),
-           duration_cast< milliseconds >( system_clock::now().time_since_epoch() ).count()
+           CTimer::getTime() / 1000.0,
+           CTimer::getAbsoluteTime() / 1000.0
            );
 
    // 1. save the data unit in recv_buffer

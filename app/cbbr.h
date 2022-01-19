@@ -15,11 +15,11 @@ enum BBRState {
 struct Filter
 {
 private:
-    const int       window_capacity_ = 100;
-    int             window_len_;
-    int    first_round_;
-    int    last_round_;    // inclusive
-    double          *rate_array_ = NULL;
+    const int   window_capacity_ = 100;
+    int         window_len_;
+    int         first_round_;
+    int         last_round_;    // inclusive
+    double      *rate_array_ = NULL;
     
 public:
     Filter( int window_len, float init_value )
@@ -197,7 +197,7 @@ class CBBR: public CCC
                 delivery_rate = getThroughput(BBRMinPipeCwnd, rt_prop_);
             }
             if ( rs->deliveryRate() >= btl_bw_
-                    || !rs->isAppLimited() ) {
+                    || !rs->getAppLimited() ) {
                 btl_bw_ = btl_bw_filter_.update(
                         round_count_,
                         delivery_rate );
@@ -311,7 +311,6 @@ class CBBR: public CCC
 
         void checkFullPipe( const RateSample* rs)
         {
-            //if ( filled_pipe_ || !round_start_ || rs->isAppLimited() )
             if ( filled_pipe_ || !round_start_ )
                 return;
             if ( btl_bw_ >= full_bw_ * 1.25 ) {
@@ -402,10 +401,7 @@ class CBBR: public CCC
             m_dPktSndPeriod = PacketMTU / pacing_rate_ / Ratio;
             m_dBtlBw = btl_bw_;
             m_iRTT = (int)rt_prop_;
-            //m_dVideoRate = btl_bw_;
             m_dVideoRate = pacing_rate_ > btl_bw_ ? pacing_rate_ : btl_bw_;
-            //m_dVideoRate = pacing_rate_ > 1.25 * btl_bw_ ? pacing_rate_ : 1.25 * btl_bw_;
-
         }
 
         void setPacingRateWithGain( double gain )
@@ -501,7 +497,6 @@ class CBBR: public CCC
         static const int BtlBWFilterLen     = 10;
         static const int BtlBWFilterMinWnd  = 600000;
 
-        //static const uint64_t RTpropFilterLen   = 1000000000;
         static const uint64_t RTpropFilterLen   = 100000000;
         static const uint64_t ProbeRTTDuration  = 200000; 
         static const int BBRMinPipeCwnd         = 4;

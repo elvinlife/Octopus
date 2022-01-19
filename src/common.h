@@ -138,6 +138,10 @@ public:
    static uint64_t initTime();
    static uint64_t getTime();
 
+      // Get absolute time in microseconds mod 1000,000,000
+      // basically it's only valid for exps within 1000 seconds
+   static uint64_t getAbsoluteTime();
+
       // Functionality:
       //    trigger an event such as new connection, close, new data, etc. for "select" call.
       // Parameters:

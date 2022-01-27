@@ -157,13 +157,15 @@ public:
    void ackData(int offset);
 
       // Functionality:
-      //    Read size of data still in the sending list.
+      //    Read size of data still in the sending list.(unsent, sent pkts before ack)
       // Parameters:
       //    None.
       // Returned value:
       //    Current size of the data in the sending list.
-
    int getCurrBufSize() const;
+
+      // Current unsent pkts number in the buffer
+   int getUnsentBufSize() const;
 
 private:
    void increase();
@@ -188,9 +190,10 @@ private:
    int32_t m_iNextMsgNo;                // next message number
 
    int m_iSize;				// buffer size (number of packets)
-   int m_iMSS;                          // maximum seqment/packet size
+   int m_iMSS;             // maximum segment/packet size
 
-   int m_iCount;			// number of used blocks
+   int m_iCount;           // number of used blocks
+   int m_iUnsentCount;
 
 private:
    CSndBuffer(const CSndBuffer&);

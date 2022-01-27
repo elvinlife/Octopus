@@ -38,7 +38,7 @@ endif
 
 DIR = $(shell pwd)
 
-APP = appserver appclient sendfile recvfile test svcclient aoiclient bbrserver svcclient-single ptcloud_client ptcloud_server ptcloud_client_vivo
+APP = appserver appclient sendfile recvfile test svcclient aoiclient bbrserver ptcloud_client ptcloud_server ptcloud_client_vivo
 
 all: $(APP)
 
@@ -66,8 +66,6 @@ svcclient: svcclient.o
 aoiclient: aoiclient.o
 	$(C++) $^ -o $@ $(LDFLAGS)
 bbrserver: bbrserver.o
-	$(C++) $^ -o $@ $(LDFLAGS)
-svcclient-single: svcclient-single.o
 	$(C++) $^ -o $@ $(LDFLAGS)
 
 clean:

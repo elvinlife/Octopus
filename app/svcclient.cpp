@@ -135,14 +135,15 @@ int main(int argc, char* argv[])
             int msg_no = frame_no * num_layers + i;
             msg = trace_arrays[key_trace][ msg_no % trace_arrays[key_trace].size() ];
 
-            uint32_t wildcard = 0;
+            //uint32_t wildcard = 300 << 16;
+            uint32_t wildcard = 0 << 16;
             if ( i == 0 ) {
-                wildcard = (msg.layer_id_ + 1) << 29 | 300 << 16;
+                wildcard = wildcard | (msg.layer_id_ + 1) << 29;
             }
             else if ( i == 1 )
-                wildcard = (msg.layer_id_ + 1) << 29 | 300 << 16 | msg.rate_;
+                wildcard = wildcard | (msg.layer_id_ + 1) << 29 | msg.rate_;
             else if ( i == 2 )
-                wildcard = (msg.layer_id_ + 1) << 29 | 300 << 16 | msg.rate_;
+                wildcard = wildcard | (msg.layer_id_ + 1) << 29 | msg.rate_;
             
             if ( frame_no % gop_size == 0 ) {
                 wildcard = wildcard | (msg.layer_id_ + 1) << 26 | PREEMPT_MUSK;

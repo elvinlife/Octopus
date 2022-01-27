@@ -52,11 +52,11 @@ m_pFirstBlock(NULL),
 m_pCurrBlock(NULL),
 m_pLastBlock(NULL),
 m_pBuffer(NULL),
-//m_iNextMsgNo(1),
 m_iNextMsgNo(0),
 m_iSize(size),
 m_iMSS(mss),
-m_iCount(0)
+m_iCount(0),
+m_iUnsentCount(0)
 {
    // initial physical buffer of "size"
    m_pBuffer = new Buffer;
@@ -119,7 +119,7 @@ CSndBuffer::~CSndBuffer()
    #endif
 }
 
-void CSndBuffer::setDropFlag( int priority )
+void CSndBuffer::setDropFlag( int threshold )
 {
     Block* p = m_pCurrBlock;
     while (p != m_pLastBlock) {
@@ -128,7 +128,7 @@ void CSndBuffer::setDropFlag( int priority )
            int msg_priority = (p->m_iExtra & 0xe0000000) >> 29;
            int queue_time = ( CTimer::getTime() - p->m_OriginTime ) / 1000;
            int slack_time = (p->m_iExtra & 0x01ff0000) >> 16;
-           if ( priority <= msg_priority && queue_time > slack_time ) {
+           if ( threshold <= msg_priority && queue_time > slack_time ) {
               p->m_Drop = true;
               fprintf( stdout, "drop_msg msg_no: %u queue_time: %u\n",
                   p->m_iMsgNo & 0x1fffffff, queue_time);
@@ -137,6 +137,26 @@ void CSndBuffer::setDropFlag( int priority )
         p = p->m_pNext;
     }
 }
+
+// for drop-priority based approach
+// void CSndBuffer::setDropFlag( int threshold )
+// {
+//    if (m_iUnsentCount < 200)
+//       return;
+//     Block* p = m_pCurrBlock;
+//     while (p != m_pLastBlock) {
+//         // the beginning of one message
+//         if ( ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) && !p->m_Drop) {
+//            int msg_priority = (p->m_iExtra & 0xe0000000) >> 29;
+//            if ( threshold <= msg_priority ) {
+//               p->m_Drop = true;
+//               fprintf( stdout, "drop_msg msg_no: %u unsent_queue: %d\n",
+//                   p->m_iMsgNo & 0x1fffffff, m_iUnsentCount);
+//            }
+//         }
+//         p = p->m_pNext;
+//    }
+// }
 
 int32_t CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, uint32_t extra_field)
 {
@@ -153,6 +173,12 @@ int32_t CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order
        setDropFlag( (extra_field & 0x1c000000) >> 26 );
    }
    CGuard::leaveCS(m_BufLock);
+
+   // CGuard::enterCS(m_BufLock);
+   // int threshold = (extra_field & 0x1c000000) >> 26;
+   // if (threshold == 1)
+   //    setDropFlag(threshold);
+   // CGuard::leaveCS(m_BufLock);
 
    uint64_t time = CTimer::getTime();
    int32_t inorder = order;
@@ -187,6 +213,7 @@ int32_t CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order
 
    CGuard::enterCS(m_BufLock);
    m_iCount += size;
+   m_iUnsentCount += size;
    CGuard::leaveCS(m_BufLock);
 
    int32_t ret = m_iNextMsgNo;
@@ -238,6 +265,7 @@ int CSndBuffer::addBufferFromFile(fstream& ifs, int len)
 
    CGuard::enterCS(m_BufLock);
    m_iCount += size;
+   m_iUnsentCount += size;
    CGuard::leaveCS(m_BufLock);
 
    m_iNextMsgNo ++;
@@ -304,6 +332,7 @@ Block* CSndBuffer::readCurrData()
       return NULL;
    Block* ret = m_pCurrBlock;
    m_pCurrBlock = m_pCurrBlock->m_pNext;
+   m_iUnsentCount -= 1;
    return ret;
 }
 

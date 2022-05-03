@@ -138,12 +138,12 @@ int main(int argc, char* argv[])
             //uint32_t wildcard = 300 << 16;
             uint32_t wildcard = 0 << 16;
             if ( i == 0 ) {
-                wildcard = wildcard | (msg.layer_id_ + 1) << 29;
+                wildcard = wildcard | (msg.layer_id_ + 1) << 29 | 300 << 16;
             }
             else if ( i == 1 )
-                wildcard = wildcard | (msg.layer_id_ + 1) << 29 | msg.rate_;
+                wildcard = wildcard | (msg.layer_id_ + 1) << 29 | msg.rate_ | 200 << 16;
             else if ( i == 2 )
-                wildcard = wildcard | (msg.layer_id_ + 1) << 29 | msg.rate_;
+                wildcard = wildcard | (msg.layer_id_ + 1) << 29 | msg.rate_ | 100 << 16;
             
             if ( frame_no % gop_size == 0 ) {
                 wildcard = wildcard | (msg.layer_id_ + 1) << 26 | PREEMPT_MUSK;

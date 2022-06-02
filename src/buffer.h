@@ -193,7 +193,6 @@ private:
    int m_iMSS;             // maximum segment/packet size
 
    int m_iCount;           // number of used blocks
-   int m_iUnsentCount;
 
 private:
    CSndBuffer(const CSndBuffer&);

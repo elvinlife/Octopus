@@ -55,8 +55,7 @@ m_pBuffer(NULL),
 m_iNextMsgNo(0),
 m_iSize(size),
 m_iMSS(mss),
-m_iCount(0),
-m_iUnsentCount(0)
+m_iCount(0)
 {
    // initial physical buffer of "size"
    m_pBuffer = new Buffer;
@@ -138,26 +137,6 @@ void CSndBuffer::setDropFlag( int threshold )
     }
 }
 
-// for drop-priority based approach
-// void CSndBuffer::setDropFlag( int threshold )
-// {
-//    if (m_iUnsentCount < 200)
-//       return;
-//     Block* p = m_pCurrBlock;
-//     while (p != m_pLastBlock) {
-//         // the beginning of one message
-//         if ( ( (p->m_iMsgNo & 0xc0000000) == 0x80000000 ) && !p->m_Drop) {
-//            int msg_priority = (p->m_iExtra & 0xe0000000) >> 29;
-//            if ( threshold <= msg_priority ) {
-//               p->m_Drop = true;
-//               fprintf( stdout, "drop_msg msg_no: %u unsent_queue: %d\n",
-//                   p->m_iMsgNo & 0x1fffffff, m_iUnsentCount);
-//            }
-//         }
-//         p = p->m_pNext;
-//    }
-// }
-
 int32_t CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order, uint32_t extra_field)
 {
    int size = len / m_iMSS;
@@ -173,12 +152,6 @@ int32_t CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order
        setDropFlag( (extra_field & 0x1c000000) >> 26 );
    }
    CGuard::leaveCS(m_BufLock);
-
-   // CGuard::enterCS(m_BufLock);
-   // int threshold = (extra_field & 0x1c000000) >> 26;
-   // if (threshold == 1)
-   //    setDropFlag(threshold);
-   // CGuard::leaveCS(m_BufLock);
 
    uint64_t time = CTimer::getTime();
    int32_t inorder = order;
@@ -209,11 +182,10 @@ int32_t CSndBuffer::addBuffer(const char* data, int len, int is_drop, bool order
 
       s = s->m_pNext;
    }
-   m_pLastBlock = s;
 
    CGuard::enterCS(m_BufLock);
+   m_pLastBlock = s;
    m_iCount += size;
-   m_iUnsentCount += size;
    CGuard::leaveCS(m_BufLock);
 
    int32_t ret = m_iNextMsgNo;
@@ -265,7 +237,6 @@ int CSndBuffer::addBufferFromFile(fstream& ifs, int len)
 
    CGuard::enterCS(m_BufLock);
    m_iCount += size;
-   m_iUnsentCount += size;
    CGuard::leaveCS(m_BufLock);
 
    m_iNextMsgNo ++;
@@ -278,6 +249,7 @@ int CSndBuffer::addBufferFromFile(fstream& ifs, int len)
 int CSndBuffer::readData(char** data, int32_t& msgno)
 {
    // No data to read
+   CGuard bufferguard(m_BufLock);
    if (m_pCurrBlock == m_pLastBlock)
       return 0;
 
@@ -328,11 +300,11 @@ int CSndBuffer::readData(char** data, const int offset, int32_t& msgno, int& msg
 
 Block* CSndBuffer::readCurrData()
 {
+   CGuard bufferguard(m_BufLock);
    if (m_pCurrBlock == m_pLastBlock)
       return NULL;
    Block* ret = m_pCurrBlock;
    m_pCurrBlock = m_pCurrBlock->m_pNext;
-   m_iUnsentCount -= 1;
    return ret;
 }
 

@@ -1,5 +1,23 @@
-make\_svc\_single.sh, make\_aoi\_single.sh, make\_ptcloud\_single.sh are Octopus applications with a single flow
-make\_svc\_anet.sh, make\_aoi\_anet.sh are applications with Active networks(switches), which drop packets when the buffer is full
-make\_svc\_bottleneck.sh is Octopus with two links(cellular switch + legacy switch)
-make\_svc\_compete.sh is exp where there are one Octopus flow and one backlogged flow
-make\_svc\_multi.sh is exp where there are two Octopus flows
+## Case study one(real-time video with frame rate adaptation)
+
+make\_aoi\_single.sh: start one octopus flow, and the router applies octopus in-network content adaptation(the queue type in mahimahi is dropbitrate\_dequeue)
+
+make\_aoi\_anet.sh: start one octopus flow, and the router is active network switch\[1\](the queue type in mahimahi is dropactivenet)
+
+## Case study two(real-time video with quality adaptation)
+
+make\_svc\_single.sh: start one octopus flow, and the router applies octopus in-network content adaptation
+
+make\_svc\_anet.sh: start one octopus flow, and the router is active network switch
+
+make\_svc\_bottleneck.sh: start one octopus flow, and there are two bottleneck links (one cellular switch, and one drop-tail legacy switch)
+
+make\_svc\_compete.sh: start one octopus flow and one backlogged BBR flow, and they share a cellular switch
+
+make\_svc\_multi.sh: start two octopus flows, and the router applies octopus in-network content adaptation
+
+## Case study three(real-time volumetric video)
+
+make\_ptcloud\_single.sh: start one octopus flow, and the router applies octopus drop logic
+
+[1]: Samrat Bhattacharjee, Kenneth L. Calvert, and Ellen W. Zegura. 1997. An Archi- tecture for Active Networking. In Proceedings of the IFIP TC6 Seventh Interna- tional Conference on High Performance Netwoking VII (White Plains, New York, USA) (HPN ’97) 

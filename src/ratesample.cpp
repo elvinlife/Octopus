@@ -56,7 +56,7 @@ void RateSample::onAckSacked(Block* block, int type)
         
     fprintf(stderr, "delivery_rate: %.2fMbps sample_delivered: %ldB ack_elapsed_: %ldms send_elapsed_: %ldms "
             "sent_ts: %ldms first_sent_ts: %ldms delivered_ts: %ldms inflight: %d"
-            "cumu_delivered: %dB prior_delivered: %dB\n", 
+            "cumu_delivered: %ldB prior_delivered: %ldB\n", 
             delivery_rate_, 
             sample_delivered,
             ack_elapsed_ / 1000,

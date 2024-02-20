@@ -2,6 +2,8 @@
 ![Status](https://img.shields.io/badge/Version-Experimental-green.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+[SEC'23 Paper](https://ieeexplore.ieee.org/abstract/document/10419234)
+
 Octopus is the first real-time 2D&3D video streaming system that leverages in-network content adaptation to achieve both high throughput and low latency. It's built upon UDT protocol. For more details, please check our paper published in SEC'2023.
 
 ## Build and deploy the Octopus endhosts
